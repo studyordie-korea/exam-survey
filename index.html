@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>시험감독관 지원 및 일정 신청</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-3 text-gray-800">
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+    <!-- 헤더 -->
+    <div class="text-center mb-6">
+      <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">공식 인증 신청서</span>
+      <h1 class="text-xl font-bold mt-2">시험감독관 지원 신청</h1>
+      <p class="text-xs text-gray-500 mt-1">사전에 배정된 입장 코드로 인증된 분만 참여 가능합니다.</p>
+    </div>
+
+    <!-- 1단계: 코드 인증 -->
+    <div id="step-auth" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">발급받은 입장코드</label>
+        <div class="flex gap-2">
+          <input type="text" id="input-code" placeholder="예: EXAM-7K9A" uppercase
+                 class="w-full uppercase font-mono tracking-wider px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <button onclick="verifyCode()" class="bg-blue-600 text-white font-medium px-5 py-3 rounded-xl hover:bg-blue-700 whitespace-nowrap">
+            인증확인
+          </button>
+        </div>
+        <p id="auth-msg" class="text-xs text-red-500 mt-2 hidden"></p>
+      </div>
+    </div>
+
+    <!-- 2단계: 설문 폼 (인증 성공 시 표시) -->
+    <form id="survey-form" class="space-y-5 hidden" onsubmit="submitSurvey(event)">
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+        코드 인증 완료: <span id="display-assigned-name" class="font-bold"></span> 님 대상 배정 코드
+      </div>
+
+      <!-- 성함 / 연락처 입력 -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">성명 <span class="text-red-500">*</span></label>
+          <input type="text" id="user-name" required placeholder="홍길동"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">휴대폰 번호 <span class="text-red-500">*</span></label>
+          <input type="tel" id="user-phone" required placeholder="010-1234-5678"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+      </div>
+
+      <!-- 동의 여부 -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">시험감독 참여 의사 <span class="text-red-500">*</span></label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+            <input type="radio" name="participate" value="동의(참여)" required class="mr-2">
+            <span class="text-sm font-medium">참여 가능</span>
+          </label>
+          <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+            <input type="radio" name="participate" value="불가(불참)" required class="mr-2">
+            <span class="text-sm font-medium">참여 불가</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 희망 시간대 (다중 선택) -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">선호 근무 시간대 (복수 선택 가능)</label>
+        <div class="space-y-2">
+          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" name="preferred_time" value="오전 (08:30 ~ 13:00)" class="w-4 h-4 text-blue-600 rounded">
+            <span class="text-xs sm:text-sm ml-2.5 font-medium">오전 (08:30 ~ 13:00)</span>
+          </label>
+          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" name="preferred_time" value="오후 (13:30 ~ 18:00)" class="w-4 h-4 text-blue-600 rounded">
+            <span class="text-xs sm:text-sm ml-2.5 font-medium">오후 (13:30 ~ 18:00)</span>
+          </label>
+          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" name="preferred_time" value="종일 (08:30 ~ 18:00)" class="w-4 h-4 text-blue-600 rounded">
+            <span class="text-xs sm:text-sm ml-2.5 font-medium">종일 (08:30 ~ 18:00)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 개인정보 수집 및 이용 동의 -->
+      <div class="pt-2">
+        <label class="flex items-start">
+          <input type="checkbox" id="privacy-agree" required class="w-4 h-4 mt-0.5 text-blue-600 rounded">
+          <span class="text-xs text-gray-600 ml-2">
+            [필수] 시험감독 선발 및 일정 조율을 위한 개인정보(성명, 연락처) 수집 및 이용에 동의합니다.
+          </span>
+        </label>
+      </div>
+
+      <button type="submit" id="btn-submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md transition">
+        제출하기
+      </button>
+    </form>
+
+    <!-- 완료 메시지 -->
+    <div id="step-complete" class="text-center py-8 hidden space-y-3">
+      <div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">✓</div>
+      <h3 class="text-lg font-bold">제출이 완료되었습니다</h3>
+      <p class="text-xs text-gray-500">배정 결과 및 세부 안내는 별도 문자로 발송됩니다.</p>
+    </div>
+  </div>
+
+  <script>
+    // Google Apps Script 웹앱 배포 URL (배포 후 교체)
+    const API_URL = "https://script.google.com/macros/s/YOUR_GAS_DEPLOYMENT_ID/exec";
+    // 데이터 암호화용 공개 공개키 (AES-256)
+    const PUBLIC_ENCRYPTION_SECRET = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
+
+    let validatedData = null;
+
+    // 페이지 로드 시 URL 파라미터(?code=...) 확인
+    window.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeParam = urlParams.get("code");
+      if (codeParam) {
+        document.getElementById("input-code").value = codeParam.toUpperCase().trim();
+        verifyCode();
+      }
+    });
+
+    async function verifyCode() {
+      const code = document.getElementById("input-code").value.trim().toUpperCase();
+      const authMsg = document.getElementById("auth-msg");
+      authMsg.classList.add("hidden");
+
+      if (!code) {
+        authMsg.textContent = "코드를 입력해주세요.";
+        authMsg.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}?action=verify&code=${encodeURIComponent(code)}`);
+        const data = await res.json();
+
+        if (data.success) {
+          validatedData = data;
+          document.getElementById("step-auth").classList.add("hidden");
+          document.getElementById("survey-form").classList.remove("hidden");
+          document.getElementById("display-assigned-name").textContent = data.assignedTo || "지정인";
+        } else {
+          authMsg.textContent = data.message || "유효하지 않거나 만료된 코드입니다.";
+          authMsg.classList.remove("hidden");
+        }
+      } catch (err) {
+        authMsg.textContent = "인증 서버 통신 실패. 네트워크를 확인해주세요.";
+        authMsg.classList.remove("hidden");
+      }
+    }
+
+    async function submitSurvey(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById("btn-submit");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "제출 중...";
+
+      const code = document.getElementById("input-code").value.trim().toUpperCase();
+      const name = document.getElementById("user-name").value.trim();
+      const phone = document.getElementById("user-phone").value.trim();
+      const participation = document.querySelector('input[name="participate"]:checked').value;
+      const times = Array.from(document.querySelectorAll('input[name="preferred_time"]:checked')).map(el => el.value);
+
+      // 민감한 개인정보를 클라이언트단에서 1차 AES 암호화
+      const rawPayload = JSON.stringify({
+        name: name,
+        phone: phone,
+        participation: participation,
+        preferred_times: times.join(", "),
+        submitted_at: new Date().toISOString()
+      });
+
+      const encryptedData = CryptoJS.AES.encrypt(rawPayload, PUBLIC_ENCRYPTION_SECRET).toString();
+
+      // 전송 객체
+      const payload = {
+        action: "submit",
+        code: code,
+        encrypted_payload: encryptedData,
+        // 유출 감지 비교용 평문(또는 해시) 메타정보
+        actual_name: name,
+        actual_phone: phone
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          document.getElementById("survey-form").classList.add("hidden");
+          document.getElementById("step-complete").classList.remove("hidden");
+        } else {
+          alert("제출 실패: " + result.message);
+          submitBtn.disabled = false;
+          submitBtn.textContent = "제출하기";
+        }
+      } catch (err) {
+        alert("오류가 발생했습니다. 다시 시도해주세요.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "제출하기";
+      }
+    }
+  </script>
+</body>
+</html>
