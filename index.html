@@ -193,10 +193,16 @@
     const API_URL = "https://script.google.com/macros/s/AKfycby344-iulb2dab0cEYQhVcuw59LS16pnJYMBQaoC4i5HUqcq0lKKTlJIUcGp_biFXHf/exec";
     const PUBLIC_ENCRYPTION_SECRET = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
 
-    // 전화번호 자동 포맷팅 함수 (10~12자리 처리)
+// 전화번호 자동 포맷팅 (앞자리 0 탈락 자동 복구 포함)
     function formatPhoneNumber(num) {
       if (!num) return "";
-      const clean = String(num).replace(/[^0-9]/g, "");
+      let clean = String(num).replace(/[^0-9]/g, "");
+      
+      // 구글 시트가 앞자리 0을 지운 10자리(10XXXXXXXX)인 경우 0 추가
+      if (clean.length === 10 && clean.startsWith("10")) {
+        clean = "0" + clean;
+      }
+
       if (clean.length === 11) {
         return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
       } else if (clean.length === 10) {
@@ -210,53 +216,7 @@
       return clean;
     }
 
-    // 시간대 텍스트 매핑 (고유 ID 관리)
-    const TIME_OPTIONS = {
-      1: "3타임 가능(대부분) : 오전 7시 반경 ~ 오후 7시 종료 예정",
-      2: "2타임(소수) : 오전 7시 반경 ~ 오후 3시경 종료 예정",
-      3: "2타임(소수) : 오전 10시 반경 ~ 오후 7시 종료 예정",
-      4: "1타임(소수) : 오전 10시 반경 ~ 오후 3시경 종료 예정"
-    };
-    let rankedTimeIds = []; // 사용자가 클릭한 순서대로 저장되는 ID 배열 [1, 3] 등
-
-    // 1. 코드 입력창 0000-000 자동 하이픈 마스킹
-    const inputCodeEl = document.getElementById("input-code");
-    inputCodeEl.addEventListener("input", (e) => {
-      let val = e.target.value.replace(/[^0-9]/g, "").slice(0, 7);
-      if (val.length > 4) {
-        val = val.slice(0, 4) + "-" + val.slice(4);
-      }
-      e.target.value = val;
-    });
-
-    inputCodeEl.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        verifyCode();
-      }
-    });
-
-    // 2. 휴대폰 번호 입력창 실시간 하이픈 포맷팅
-    const phoneInputEl = document.getElementById("user-phone");
-    phoneInputEl.addEventListener("input", (e) => {
-      e.target.value = formatPhoneNumber(e.target.value);
-    });
-
-    // URL 파라미터(?code=...) 자동 연결
-    window.addEventListener("DOMContentLoaded", () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const codeParam = urlParams.get("code");
-      if (codeParam) {
-        let clean = codeParam.replace(/[^0-9]/g, "").slice(0, 7);
-        if (clean.length > 4) {
-          clean = clean.slice(0, 4) + "-" + clean.slice(4);
-        }
-        document.getElementById("input-code").value = clean;
-        verifyCode();
-      }
-    });
-
-    // 3. 코드 검증 및 자동 기입(Pre-fill)
+    // 코드 검증 및 자동 기입
     async function verifyCode() {
       const codeInput = document.getElementById("input-code");
       const authBtn = document.getElementById("btn-verify");
@@ -292,9 +252,10 @@
           document.getElementById("survey-form").classList.remove("hidden");
           document.getElementById("display-assigned-name").textContent = data.assignedTo || "지정인";
 
-          // 성명 및 하이픈 변환된 전화번호 자동 입력창 기입 (수정 가능)
+          // 성명 및 전화번호 자동 기입 (백엔드 변수명 호환 처리)
+          const targetPhone = data.assignedPhone || data.assigned_phone || data.phone || "";
           document.getElementById("user-name").value = data.assignedTo || "";
-          document.getElementById("user-phone").value = formatPhoneNumber(data.assignedPhone || "");
+          document.getElementById("user-phone").value = formatPhoneNumber(targetPhone);
         } else {
           authMsg.textContent = data.message || "유효하지 않은 코드입니다.";
           authMsg.classList.remove("hidden");
