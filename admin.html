@@ -14,7 +14,7 @@
     <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">논술고사 감독위원 관리 콘솔</h1>
-        <p class="text-xs text-slate-500 mt-1">입장코드 관리, 유출 탐지 및 응답 데이터 복호화</p>
+        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지 및 응답 데이터 복호화</p>
       </div>
       <div class="flex items-center gap-2">
         <input type="password" id="master-key" placeholder="복호화 마스터키" value="EXAM_PROCTOR_AES_SECURE_KEY_2026"
@@ -28,39 +28,40 @@
     <!-- 요약 통계 -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div class="bg-white p-4 rounded-xl border">
-        <div class="text-xs text-slate-500">총 발급 건수</div>
+        <div class="text-xs text-slate-500 font-medium">총 발급 건수</div>
         <div id="stat-total" class="text-2xl font-bold mt-1 text-slate-800">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border">
-        <div class="text-xs text-slate-500">응답 완료(재작성 포함)</div>
+        <div class="text-xs text-slate-500 font-medium">응답 완료(재작성 포함)</div>
         <div id="stat-completed" class="text-2xl font-bold mt-1 text-blue-600">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border">
-        <div class="text-xs text-slate-500">미응답</div>
+        <div class="text-xs text-slate-500 font-medium">미응답</div>
         <div id="stat-pending" class="text-2xl font-bold mt-1 text-gray-500">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border bg-amber-50/50">
-        <div class="text-xs text-amber-700">⚠️ 링크 유출 의심</div>
+        <div class="text-xs text-amber-700 font-medium">⚠️ 링크 유출 의심</div>
         <div id="stat-leaks" class="text-2xl font-bold mt-1 text-amber-600">-</div>
       </div>
     </div>
 
-    <!-- 코드 생성 섹션 -->
+    <!-- 코드 생성 섹션 (0000-000 난수) -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
-      <h2 class="text-md font-bold">1. 입장 코드 신규 생성 및 일괄 등록</h2>
+      <h2 class="text-md font-bold">1. 7자리 코드(0000-000) 신규 생성 및 등록</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">대상자 명단 (성명, 전화번호 순)</label>
           <textarea id="bulk-candidates" rows="3" placeholder="홍길동, 010-1234-5678&#10;이영희, 010-9876-5432"
                     class="w-full text-xs font-mono p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
           <button onclick="registerCodes()" class="mt-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">
-            난수 코드 부여 후 구글 시트 등록
+            0000-000 난수 코드 부여 후 구글 시트 등록
           </button>
         </div>
         <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-2">
-          <p class="font-bold text-slate-700">문자 발송 URL 가이드</p>
-          <code class="block bg-white p-2 rounded border text-blue-600 break-all">
-            https://[GitHub-Username].github.io/[Repo-Name]/?code=발급코드
+          <p class="font-bold text-slate-700">문자 발송 URL 안내</p>
+          <p class="text-slate-500">생성된 7자리 코드를 붙여 문자로 발송하시면 원클릭 인증됩니다:</p>
+          <code class="block bg-white p-2 rounded border text-blue-600 break-all font-mono">
+            https://[GitHub-Username].github.io/[Repo-Name]/?code=0000-000
           </code>
         </div>
       </div>
@@ -78,7 +79,7 @@
       <div class="overflow-x-auto">
         <table class="w-full text-xs text-left border-collapse">
           <thead>
-            <tr class="bg-slate-100 border-b text-slate-600">
+            <tr class="bg-slate-100 border-b text-slate-600 whitespace-nowrap">
               <th class="p-2.5">코드</th>
               <th class="p-2.5">배정 대상자</th>
               <th class="p-2.5">실제 입력자</th>
@@ -106,13 +107,10 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
     let cachedSubmissions = [];
 
+    // 7자리 숫자 (0000-000) 생성
     function generateCleanCode() {
-      const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-      let code = "";
-      for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return code;
+      const num = String(Math.floor(1000000 + Math.random() * 9000000));
+      return `${num.substring(0, 4)}-${num.substring(4)}`;
     }
 
     async function registerCodes() {
@@ -211,16 +209,16 @@
         if (isLeak) statusText = "⚠️ 공유 유출";
 
         tr.innerHTML = `
-          <td class="p-2.5 font-mono font-bold">${item.code}</td>
-          <td class="p-2.5">${item.assigned_name} (${item.assigned_phone || "-"})</td>
-          <td class="p-2.5 font-semibold ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
-          <td class="p-2.5"><span class="px-2 py-0.5 rounded-full text-[11px] ${isSubmitted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${statusText}</span></td>
-          <td class="p-2.5 font-medium">${dec.participation || '-'}</td>
+          <td class="p-2.5 font-mono font-bold whitespace-nowrap">${item.code}</td>
+          <td class="p-2.5 whitespace-nowrap">${item.assigned_name} (${item.assigned_phone || "-"})</td>
+          <td class="p-2.5 font-semibold whitespace-nowrap ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
+          <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] ${isSubmitted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${statusText}</span></td>
+          <td class="p-2.5 font-medium whitespace-nowrap">${dec.participation || '-'}</td>
           <td class="p-2.5 max-w-xs truncate" title="${dec.time_priorities || ''}">${dec.time_priorities || '-'}</td>
-          <td class="p-2.5">${dec.affiliation || '-'}</td>
-          <td class="p-2.5">${dec.bank_name ? `${dec.bank_name} ${dec.account_number}` : '-'}</td>
+          <td class="p-2.5 whitespace-nowrap">${dec.affiliation || '-'}</td>
+          <td class="p-2.5 whitespace-nowrap">${dec.bank_name ? `${dec.bank_name} ${dec.account_number}` : '-'}</td>
           <td class="p-2.5 max-w-xs truncate" title="${dec.training_date || ''}">${dec.training_date ? dec.training_date.substring(0, 15) + '...' : '-'}</td>
-          <td class="p-2.5 text-slate-400 text-[11px]">${item.submitted_at ? item.submitted_at.substring(0, 16).replace("T", " ") : "-"}</td>
+          <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${item.submitted_at ? item.submitted_at.substring(0, 16).replace("T", " ") : "-"}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -235,7 +233,7 @@
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
       const masterKey = document.getElementById("master-key").value.trim();
 
-      let csv = "\uFEFF"; // 엑셀 한글 깨짐 방지 BOM
+      let csv = "\uFEFF"; // 한글 깨짐 방지 BOM
       csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,상태,참여의사,시간대 우선순위,소속,은행명,계좌번호,주소,사전교육 희망일시,제출일시\n";
 
       cachedSubmissions.forEach(row => {
