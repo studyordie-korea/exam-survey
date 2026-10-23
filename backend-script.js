@@ -1,27 +1,47 @@
 /**
- * 시험감독 설문 시스템 - Apps Script Backend API
- * 구글 스프레드시트에 연동하여 실행합니다.
+ * 논술고사 감독위원 신청 시스템 API
  */
-
-const MASTER_ADMIN_KEY = "EXAM_PROCTOR_AES_SECURE_KEY_2026"; // index.html과 admin.html의 키와 일치
+const MASTER_ADMIN_KEY = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
 
 function doGet(e) {
   const action = e.parameter.action;
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   
-  // 1. 코드 유효성 검증 (index.html)
+  // 1. 코드 인증 및 기존 제출 여부 조회 (index.html)
   if (action === "verify") {
-    const code = (e.parameter.code || "").toUpperCase();
+    const inputCode = String(e.parameter.code || "").trim().toUpperCase();
     const data = sheet.getDataRange().getValues();
     
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] == code) {
-        return createResponse({
-          success: true,
-          assignedTo: data[i][1] // 원래 배정된 이름
-        });
+    let assignedName = "";
+    let assignedPhone = "";
+    let alreadySubmitted = false;
+    let codeFound = false;
+
+    for (let i = 0; i < data.length; i++) {
+      const cellCode = String(data[i][0] || "").trim().toUpperCase();
+      if (cellCode === "코드") continue;
+      
+      if (cellCode === inputCode) {
+        codeFound = true;
+        assignedName = data[i][1];
+        assignedPhone = data[i][2];
+
+        // 6열(암호화 데이터)이나 8열(제출일시)이 존재하면 이미 제출한 이력이 있음
+        if (data[i][5] || data[i][7]) {
+          alreadySubmitted = true;
+        }
       }
     }
+
+    if (codeFound) {
+      return createResponse({
+        success: true,
+        assignedTo: assignedName,
+        assignedPhone: assignedPhone,
+        alreadySubmitted: alreadySubmitted
+      });
+    }
+
     return createResponse({ success: false, message: "존재하지 않는 코드입니다." });
   }
 
@@ -35,6 +55,7 @@ function doGet(e) {
     const data = sheet.getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === "코드") continue;
       list.push({
         code: data[i][0],
         assigned_name: data[i][1],
@@ -55,10 +76,10 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
     const action = body.action;
 
-    // 1. 관리자의 코드 일괄 등록
+    // 관리자: 코드 등록
     if (action === "register_codes") {
       if (body.admin_key !== MASTER_ADMIN_KEY) {
         return createResponse({ success: false, message: "관리자 인증 실패" });
@@ -79,33 +100,55 @@ function doPost(e) {
       return createResponse({ success: true });
     }
 
-    // 2. 지원자의 설문 제출 (유출 감지 로직 탑재)
+    // 지원자: 설문 제출
     if (action === "submit") {
       const code = body.code;
       const data = sheet.getDataRange().getValues();
+      let assignedName = "";
+      let assignedPhone = "";
+      let targetRowIndex = -1;
 
       for (let i = 1; i < data.length; i++) {
-        if (data[i][0] == code) {
-          const assignedName = data[i][1];
-          const actualName = body.actual_name;
+        if (String(data[i][0]).trim().toUpperCase() === code) {
+          assignedName = data[i][1];
+          assignedPhone = data[i][2];
 
-          // 발급 대상자와 실제 입력자 이름이 다른 경우 유출로 판정
-          let status = "NORMAL";
-          if (assignedName && actualName && assignedName.trim() !== actualName.trim()) {
-            status = "SHARED_SUSPECT"; // 초대받지 않은 제3자가 제출함 (원 배정자 추적 가능)
+          // 최초 미제출 상태의 행을 찾음
+          if (!data[i][5] && !data[i][7] && targetRowIndex === -1) {
+            targetRowIndex = i + 1;
           }
-
-          // DB 업데이트 (암호문 저장)
-          sheet.getRange(i + 1, 4).setValue(body.actual_name);
-          sheet.getRange(i + 1, 5).setValue(body.actual_phone);
-          sheet.getRange(i + 1, 6).setValue(body.encrypted_payload);
-          sheet.getRange(i + 1, 7).setValue(status);
-          sheet.getRange(i + 1, 8).setValue(new Date().toISOString());
-
-          return createResponse({ success: true });
         }
       }
-      return createResponse({ success: false, message: "해당 코드를 찾을 수 없습니다." });
+
+      // 유출 여부 판정
+      let status = "NORMAL";
+      if (assignedName && body.actual_name && assignedName.trim() !== body.actual_name.trim()) {
+        status = "SHARED_SUSPECT";
+      }
+
+      // 처음 작성하는 경우: 기존 빈 행에 저장
+      if (targetRowIndex !== -1) {
+        sheet.getRange(targetRowIndex, 4).setValue(body.actual_name);
+        sheet.getRange(targetRowIndex, 5).setValue(body.actual_phone);
+        sheet.getRange(targetRowIndex, 6).setValue(body.encrypted_payload);
+        sheet.getRange(targetRowIndex, 7).setValue(status);
+        sheet.getRange(targetRowIndex, 8).setValue(new Date().toISOString());
+      } else {
+        // 이미 제출 이력이 있어 재작성하는 경우: 덮어쓰지 않고 새로운 행을 아래에 추가
+        if (status === "NORMAL") status = "RESUBMITTED";
+        sheet.appendRow([
+          code,
+          assignedName,
+          assignedPhone,
+          body.actual_name,
+          body.actual_phone,
+          body.encrypted_payload,
+          status,
+          new Date().toISOString()
+        ]);
+      }
+
+      return createResponse({ success: true });
     }
 
   } catch (err) {
@@ -116,15 +159,4 @@ function doPost(e) {
 function createResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
-}
-
-// 시트 초기 세팅 함수 (최초 1회 실행)
-function setupSheet() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  sheet.clear();
-  sheet.appendRow([
-    "코드", "원래배정자명", "원래배정연락처", 
-    "실제입력자명", "실제입력연락처", "암호화데이터(AES)", 
-    "상태(NORMAL/SHARED_SUSPECT)", "제출일시"
-  ]);
 }
