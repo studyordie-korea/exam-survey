@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시험감독 모집 관리자 센터</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <div class="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+    <!-- 헤더 -->
+    <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">시험감독 모집 관리자 콘솔</h1>
+        <p class="text-xs text-slate-500 mt-1">개인별 입장코드 관리, 유출 탐지 및 응답 데이터 복호화</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="password" id="master-key" placeholder="복호화 마스터키 입력"
+               class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button onclick="loadDashboardData()" class="bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-800">
+          데이터 동기화
+        </button>
+      </div>
+    </header>
+
+    <!-- 요약 통계 카드 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200">
+        <div class="text-xs text-slate-500 font-medium">총 발급 코드</div>
+        <div id="stat-total" class="text-2xl font-bold mt-1 text-slate-800">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200">
+        <div class="text-xs text-slate-500 font-medium">응답 완료 건수</div>
+        <div id="stat-completed" class="text-2xl font-bold mt-1 text-blue-600">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200">
+        <div class="text-xs text-slate-500 font-medium">미응답자</div>
+        <div id="stat-pending" class="text-2xl font-bold mt-1 text-gray-500">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/50">
+        <div class="text-xs text-amber-700 font-medium">⚠️ 링크 공유/유출 의심</div>
+        <div id="stat-leaks" class="text-2xl font-bold mt-1 text-amber-600">-</div>
+      </div>
+    </div>
+
+    <!-- 탭 / 섹션: 코드 생성 & 업로드 -->
+    <div class="bg-white rounded-xl border p-5 space-y-4">
+      <h2 class="text-md font-bold">1. 입장 코드 신규 생성 및 일괄 등록</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">대상자 명단 붙여넣기 (성명, 전화번호 순)</label>
+          <textarea id="bulk-candidates" rows="4" placeholder="김철수, 010-1111-2222&#10;이영희, 010-3333-4444"
+                    class="w-full text-xs font-mono p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <button onclick="registerCodes()" class="mt-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">
+            쉬운 난수 코드 자동 부여 후 서버 업로드
+          </button>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-2">
+          <p class="font-bold text-slate-700">문자 발송 URL 안내</p>
+          <p class="text-slate-500">코드가 생성되면 지원자에게 다음과 같이 문자를 발송하시면 바로 인증됩니다:</p>
+          <code class="block bg-white p-2 rounded border text-blue-600 break-all">
+            https://[GitHub-Username].github.io/[Repo-Name]/?code=난수코드
+          </code>
+        </div>
+      </div>
+    </div>
+
+    <!-- 응답 목록 및 복호화 엑셀 다운로드 -->
+    <div class="bg-white rounded-xl border p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+        <h2 class="text-md font-bold">2. 응답 현황 및 결과 (복호화 데이터)</h2>
+        <button onclick="downloadExcelCSV()" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2">
+          <span>📊 복호화 데이터 엑셀(CSV) 다운로드</span>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-100 border-b text-slate-600">
+              <th class="p-3">코드</th>
+              <th class="p-3">발급 대상자</th>
+              <th class="p-3">실제 입력자</th>
+              <th class="p-3">상태 판정</th>
+              <th class="p-3">참여여부</th>
+              <th class="p-3">희망 시간대</th>
+              <th class="p-3">제출시각</th>
+            </tr>
+          </thead>
+          <tbody id="response-table-body" class="divide-y text-slate-700">
+            <tr>
+              <td colspan="7" class="p-4 text-center text-slate-400">데이터 동기화 버튼을 눌러주세요.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/YOUR_GAS_DEPLOYMENT_ID/exec";
+    let cachedSubmissions = [];
+
+    // 가독성 높은 6자리 난수 생성기 (입력 혼동을 주는 0, O, 1, I 제외)
+    function generateCleanCode() {
+      const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+      let code = "";
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    async function registerCodes() {
+      const text = document.getElementById("bulk-candidates").value.trim();
+      const masterKey = document.getElementById("master-key").value.trim();
+      if (!masterKey) return alert("마스터키를 상단에 먼저 입력해주세요.");
+      if (!text) return alert("명단을 입력해주세요.");
+
+      const lines = text.split("\n");
+      const list = [];
+      lines.forEach(line => {
+        const parts = line.split(",").map(p => p.trim());
+        if (parts[0]) {
+          list.push({
+            code: generateCleanCode(),
+            name: parts[0],
+            phone: parts[1] || ""
+          });
+        }
+      });
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "register_codes",
+          admin_key: masterKey,
+          codes: list
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`${list.length}명의 코드가 성공적으로 등록되었습니다.`);
+        document.getElementById("bulk-candidates").value = "";
+        loadDashboardData();
+      } else {
+        alert("등록 실패: " + data.message);
+      }
+    }
+
+    async function loadDashboardData() {
+      const masterKey = document.getElementById("master-key").value.trim();
+      if (!masterKey) return alert("데이터를 조회하고 복호화하려면 마스터키를 입력하세요.");
+
+      try {
+        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(masterKey)}`);
+        const json = await res.json();
+
+        if (!json.success) return alert(json.message);
+
+        cachedSubmissions = json.data;
+        renderDashboard(json.data, masterKey);
+      } catch (e) {
+        alert("데이터 로드 실패.");
+      }
+    }
+
+    function renderDashboard(data, key) {
+      let total = data.length;
+      let completed = 0;
+      let leaks = 0;
+
+      const tbody = document.getElementById("response-table-body");
+      tbody.innerHTML = "";
+
+      data.forEach(item => {
+        let isSubmitted = !!item.encrypted_payload;
+        if (isSubmitted) completed++;
+
+        // 유출/공유 의심 확인
+        let isLeak = item.status === "SHARED_SUSPECT";
+        if (isLeak) leaks++;
+
+        // 복호화 시도
+        let decrypted = { participation: "-", preferred_times: "-", submitted_at: "-" };
+        if (item.encrypted_payload) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(item.encrypted_payload, key);
+            const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+            if (decryptedStr) decrypted = JSON.parse(decryptedStr);
+          } catch (e) {
+            decrypted.participation = "복호화 실패(키 불일치)";
+          }
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = isLeak ? "bg-amber-50/70" : "hover:bg-slate-50";
+
+        let statusBadge = isSubmitted 
+          ? (isLeak ? `<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-bold">⚠️ 공유 유출 의심</span>` 
+                    : `<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full">정상 제출</span>`)
+          : `<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">미응답</span>`;
+
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold">${item.code}</td>
+          <td class="p-3">${item.assigned_name} (${item.assigned_phone || "-"})</td>
+          <td class="p-3 font-semibold ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
+          <td class="p-3">${statusBadge}</td>
+          <td class="p-3">${decrypted.participation}</td>
+          <td class="p-3">${decrypted.preferred_times}</td>
+          <td class="p-3 text-slate-400">${item.submitted_at ? item.submitted_at.substring(0, 16).replace("T", " ") : "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("stat-total").textContent = total;
+      document.getElementById("stat-completed").textContent = completed;
+      document.getElementById("stat-pending").textContent = total - completed;
+      document.getElementById("stat-leaks").textContent = leaks;
+    }
+
+    function downloadExcelCSV() {
+      if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
+      const masterKey = document.getElementById("master-key").value.trim();
+
+      let csv = "\uFEFF"; // 한글 깨짐 방지 BOM
+      csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,유출 상태,참여의사,희망시간대,제출일시\n";
+
+      cachedSubmissions.forEach(row => {
+        let dec = { participation: "", preferred_times: "" };
+        if (row.encrypted_payload) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, masterKey);
+            dec = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+          } catch(e) {}
+        }
+
+        const line = [
+          `"${row.code}"`,
+          `"${row.assigned_name}"`,
+          `"${row.assigned_phone}"`,
+          `"${row.actual_name || ''}"`,
+          `"${row.actual_phone || ''}"`,
+          `"${row.status}"`,
+          `"${dec.participation || ''}"`,
+          `"${dec.preferred_times || ''}"`,
+          `"${row.submitted_at || ''}"`
+        ];
+        csv += line.join(",") + "\n";
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `시험감독_응답현황_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
