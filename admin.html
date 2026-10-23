@@ -14,7 +14,7 @@
     <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">논술고사 감독위원 관리 콘솔</h1>
-        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지 및 응답 데이터 복호화</p>
+        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지, 수정 잠금(마감) 및 데이터 복호화</p>
       </div>
       <div class="flex items-center gap-2">
         <input type="password" id="master-key" placeholder="복호화 마스터키" value="EXAM_PROCTOR_AES_SECURE_KEY_2026"
@@ -36,8 +36,8 @@
         <div id="stat-completed" class="text-2xl font-bold mt-1 text-blue-600">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border">
-        <div class="text-xs text-slate-500 font-medium">미응답</div>
-        <div id="stat-pending" class="text-2xl font-bold mt-1 text-gray-500">-</div>
+        <div class="text-xs text-slate-500 font-medium">수정 마감(잠금) 완료</div>
+        <div id="stat-locked" class="text-2xl font-bold mt-1 text-indigo-600">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border bg-amber-50/50">
         <div class="text-xs text-amber-700 font-medium">⚠️ 링크 유출 의심</div>
@@ -69,11 +69,16 @@
 
     <!-- 응답 목록 및 복호화 엑셀 다운로드 -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+      <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <h2 class="text-md font-bold">2. 응답 현황 및 결과 (복호화 뷰어)</h2>
-        <button onclick="downloadExcelCSV()" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700">
-          📊 복호화 데이터 엑셀(CSV) 다운로드
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="lockAllSubmitted()" class="bg-indigo-600 text-white text-xs font-bold px-3.5 py-2.5 rounded-lg hover:bg-indigo-700 transition">
+            🔒 응답 완료자 전원 일괄 수정잠금
+          </button>
+          <button onclick="downloadExcelCSV()" class="bg-emerald-600 text-white text-xs font-bold px-3.5 py-2.5 rounded-lg hover:bg-emerald-700 transition">
+            📊 복호화 데이터 엑셀(CSV) 다운로드
+          </button>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -84,6 +89,7 @@
               <th class="p-2.5">배정 대상자</th>
               <th class="p-2.5">실제 입력자</th>
               <th class="p-2.5">상태</th>
+              <th class="p-2.5">수정 제어</th>
               <th class="p-2.5">참여의사</th>
               <th class="p-2.5">시간대 우선순위</th>
               <th class="p-2.5">소속</th>
@@ -94,7 +100,7 @@
           </thead>
           <tbody id="response-table-body" class="divide-y text-slate-700">
             <tr>
-              <td colspan="10" class="p-4 text-center text-slate-400">우측 상단 '데이터 동기화'를 눌러주세요.</td>
+              <td colspan="11" class="p-4 text-center text-slate-400">우측 상단 '데이터 동기화'를 눌러주세요.</td>
             </tr>
           </tbody>
         </table>
@@ -103,17 +109,14 @@
   </div>
 
   <script>
-    // ⚠️ 구글 배포 URL을 입력하세요.
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
     let cachedSubmissions = [];
 
-    // 7자리 숫자 (0000-000) 생성
     function generateCleanCode() {
       const num = String(Math.floor(1000000 + Math.random() * 9000000));
       return `${num.substring(0, 4)}-${num.substring(4)}`;
     }
 
-// 전화번호 자동 포맷팅 함수
     function formatPhoneNumber(num) {
       if (!num) return "";
       const clean = String(num).replace(/[^0-9]/g, "");
@@ -143,7 +146,7 @@
           list.push({
             code: generateCleanCode(),
             name: parts[0],
-            phone: formatPhoneNumber(parts[1] || "") // 11~12자리 숫자도 하이픈 자동 변환
+            phone: formatPhoneNumber(parts[1] || "")
           });
         }
       });
@@ -189,9 +192,66 @@
       }
     }
 
+    // 개별 수정 잠금 / 잠금해제 토글
+    async function toggleLock(code) {
+      const masterKey = document.getElementById("master-key").value.trim();
+      if (!masterKey) return alert("마스터키를 입력하세요.");
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "toggle_lock",
+            admin_key: masterKey,
+            code: code
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadDashboardData();
+        } else {
+          alert("처리 실패: " + data.message);
+        }
+      } catch (e) {
+        alert("통신 오류: " + e.message);
+      }
+    }
+
+    // 제출 완료자 전원 일괄 잠금
+    async function lockAllSubmitted() {
+      const masterKey = document.getElementById("master-key").value.trim();
+      if (!masterKey) return alert("마스터키를 입력하세요.");
+
+      if (!confirm("현재까지 응답을 완료한 모든 지원자의 수정을 잠그시겠습니까?\n잠금 후에는 지원자가 재접속해도 수정할 수 없습니다.")) {
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "lock_all_submitted",
+            admin_key: masterKey
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`총 ${data.count}건의 응답이 수정 잠금(마감) 처리되었습니다.`);
+          loadDashboardData();
+        } else {
+          alert("처리 실패: " + data.message);
+        }
+      } catch (e) {
+        alert("통신 오류: " + e.message);
+      }
+    }
+
     function renderDashboard(data, key) {
       let total = data.length;
       let completed = 0;
+      let lockedCount = 0;
       let leaks = 0;
 
       const tbody = document.getElementById("response-table-body");
@@ -200,6 +260,9 @@
       data.forEach(item => {
         let isSubmitted = Boolean(item.encrypted_payload);
         if (isSubmitted) completed++;
+
+        let isLocked = (item.status === "LOCKED");
+        if (isLocked) lockedCount++;
 
         let isLeak = item.status && item.status.includes("SHARED_SUSPECT");
         if (isLeak) leaks++;
@@ -216,18 +279,41 @@
         }
 
         const tr = document.createElement("tr");
-        tr.className = isLeak ? "bg-amber-50/70" : "hover:bg-slate-50";
+        tr.className = isLeak ? "bg-amber-50/70" : (isLocked ? "bg-slate-100/70" : "hover:bg-slate-50");
 
         let statusText = item.status;
-        if (item.status === "NORMAL") statusText = "정상 제출";
-        if (item.status === "RESUBMITTED") statusText = "신규 재작성";
-        if (isLeak) statusText = "⚠️ 공유 유출";
+        let badgeClass = "bg-gray-100 text-gray-500";
+        if (item.status === "NORMAL") {
+          statusText = "정상 제출";
+          badgeClass = "bg-green-100 text-green-700";
+        } else if (item.status === "RESUBMITTED") {
+          statusText = "신규 재작성";
+          badgeClass = "bg-blue-100 text-blue-700";
+        } else if (item.status === "LOCKED") {
+          statusText = "🔒 확인(마감)";
+          badgeClass = "bg-indigo-100 text-indigo-700 font-semibold";
+        } else if (isLeak) {
+          statusText = "⚠️ 공유 유출";
+          badgeClass = "bg-red-100 text-red-700 font-bold";
+        }
+
+        // 잠금/잠금해제 버튼
+        let lockBtn = `
+          <button onclick="toggleLock('${item.code}')" class="px-2 py-1 text-[11px] rounded border font-medium transition ${
+            isLocked 
+              ? 'bg-white border-indigo-300 text-indigo-700 hover:bg-indigo-50' 
+              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+          }">
+            ${isLocked ? '🔓 잠금해제' : '🔒 수정잠금'}
+          </button>
+        `;
 
         tr.innerHTML = `
           <td class="p-2.5 font-mono font-bold whitespace-nowrap">${item.code}</td>
           <td class="p-2.5 whitespace-nowrap">${item.assigned_name} (${item.assigned_phone || "-"})</td>
           <td class="p-2.5 font-semibold whitespace-nowrap ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
-          <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] ${isSubmitted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${statusText}</span></td>
+          <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] ${badgeClass}">${statusText}</span></td>
+          <td class="p-2.5 whitespace-nowrap">${lockBtn}</td>
           <td class="p-2.5 font-medium whitespace-nowrap">${dec.participation || '-'}</td>
           <td class="p-2.5 max-w-xs truncate" title="${dec.time_priorities || ''}">${dec.time_priorities || '-'}</td>
           <td class="p-2.5 whitespace-nowrap">${dec.affiliation || '-'}</td>
@@ -240,7 +326,7 @@
 
       document.getElementById("stat-total").textContent = total;
       document.getElementById("stat-completed").textContent = completed;
-      document.getElementById("stat-pending").textContent = total - completed;
+      document.getElementById("stat-locked").textContent = lockedCount;
       document.getElementById("stat-leaks").textContent = leaks;
     }
 
@@ -248,7 +334,7 @@
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
       const masterKey = document.getElementById("master-key").value.trim();
 
-      let csv = "\uFEFF"; // 한글 깨짐 방지 BOM
+      let csv = "\uFEFF";
       csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,상태,참여의사,시간대 우선순위,소속,은행명,계좌번호,주소,사전교육 희망일시,제출일시\n";
 
       cachedSubmissions.forEach(row => {
