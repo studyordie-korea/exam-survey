@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>시험감독관 지원 및 일정 신청</title>
+  <title>논술고사 감독위원 신청 및 일정 조사</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
@@ -13,7 +13,7 @@
     <!-- 헤더 -->
     <div class="text-center mb-6">
       <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">공식 인증 신청서</span>
-      <h1 class="text-xl font-bold mt-2">시험감독관 지원 신청</h1>
+      <h1 class="text-xl font-bold mt-2">논술고사 감독위원 신청</h1>
       <p class="text-xs text-gray-500 mt-1">사전에 배정된 입장 코드로 인증된 분만 참여 가능합니다.</p>
     </div>
 
@@ -22,7 +22,7 @@
       <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1">발급받은 입장코드</label>
         <div class="flex gap-2">
-          <input type="text" id="input-code" placeholder="예: EXAM-7K9A" uppercase
+          <input type="text" id="input-code" placeholder="예: EXAM-7K9A"
                  class="w-full uppercase font-mono tracking-wider px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
           <button onclick="verifyCode()" class="bg-blue-600 text-white font-medium px-5 py-3 rounded-xl hover:bg-blue-700 whitespace-nowrap">
             인증확인
@@ -32,13 +32,13 @@
       </div>
     </div>
 
-    <!-- 2단계: 설문 폼 (인증 성공 시 표시) -->
-    <form id="survey-form" class="space-y-5 hidden" onsubmit="submitSurvey(event)">
+    <!-- 2단계: 설문 폼 -->
+    <form id="survey-form" class="space-y-6 hidden" onsubmit="submitSurvey(event)">
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
         코드 인증 완료: <span id="display-assigned-name" class="font-bold"></span> 님 대상 배정 코드
       </div>
 
-      <!-- 성함 / 연락처 입력 -->
+      <!-- 성함 / 연락처 (자동 기입되며 수정 가능) -->
       <div class="space-y-3">
         <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">성명 <span class="text-red-500">*</span></label>
@@ -52,38 +52,114 @@
         </div>
       </div>
 
-      <!-- 동의 여부 -->
+      <!-- 논술고사 참여 의사 -->
       <div>
-        <label class="block text-xs font-semibold text-gray-700 mb-1">시험감독 참여 의사 <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">논술고사 참여 의사 <span class="text-red-500">*</span></label>
+        <p class="text-xs text-blue-600 font-medium mb-2">※ 올해 논술고사는 2026년 11월 22일(일)입니다.</p>
         <div class="grid grid-cols-2 gap-2">
           <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
-            <input type="radio" name="participate" value="동의(참여)" required class="mr-2">
+            <input type="radio" name="participate" value="참여 가능" required onchange="toggleParticipation(true)" class="mr-2">
             <span class="text-sm font-medium">참여 가능</span>
           </label>
           <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
-            <input type="radio" name="participate" value="불가(불참)" required class="mr-2">
+            <input type="radio" name="participate" value="참여 불가" required onchange="toggleParticipation(false)" class="mr-2">
             <span class="text-sm font-medium">참여 불가</span>
           </label>
         </div>
       </div>
 
-      <!-- 희망 시간대 (다중 선택) -->
-      <div>
-        <label class="block text-xs font-semibold text-gray-700 mb-1">선호 근무 시간대 (복수 선택 가능)</label>
-        <div class="space-y-2">
-          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
-            <input type="checkbox" name="preferred_time" value="오전 (08:30 ~ 13:00)" class="w-4 h-4 text-blue-600 rounded">
-            <span class="text-xs sm:text-sm ml-2.5 font-medium">오전 (08:30 ~ 13:00)</span>
-          </label>
-          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
-            <input type="checkbox" name="preferred_time" value="오후 (13:30 ~ 18:00)" class="w-4 h-4 text-blue-600 rounded">
-            <span class="text-xs sm:text-sm ml-2.5 font-medium">오후 (13:30 ~ 18:00)</span>
-          </label>
-          <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
-            <input type="checkbox" name="preferred_time" value="종일 (08:30 ~ 18:00)" class="w-4 h-4 text-blue-600 rounded">
-            <span class="text-xs sm:text-sm ml-2.5 font-medium">종일 (08:30 ~ 18:00)</span>
-          </label>
+      <!-- 참여 가능자 전용 상세 영역 -->
+      <div id="section-available-details" class="space-y-6 hidden">
+
+        <!-- 희망 시간대 순위 선택 -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-xs font-semibold text-gray-700">선호 근무 시간대 (누르는 순서대로 순위 지정) <span class="text-red-500">*</span></label>
+            <button type="button" onclick="resetTimeRanking()" class="text-xs text-blue-600 underline">선택 초기화</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">※ 배정되는 역할에 따라 정확한 출근시간은 달라질 수 있으며, 고사 전일까지 개별 통보 됩니다.</p>
+
+          <div class="space-y-2" id="time-options-container">
+            <button type="button" onclick="selectTimeOption(this, '3타임 가능(대부분) : 오전 7시 반경 ~ 오후 7시 종료 예정')"
+                    class="time-option-btn w-full text-left p-3 border border-gray-200 rounded-xl hover:border-blue-400 flex items-center justify-between text-xs">
+              <span>1) 3타임 가능(대부분) : 오전 7시 반경 ~ 오후 7시 종료 예정</span>
+              <span class="badge text-xs font-bold text-blue-600 hidden"></span>
+            </button>
+            <button type="button" onclick="selectTimeOption(this, '2타임(소수) : 오전 7시 반경 ~ 오후 3시경 종료 예정')"
+                    class="time-option-btn w-full text-left p-3 border border-gray-200 rounded-xl hover:border-blue-400 flex items-center justify-between text-xs">
+              <span>2) 2타임(소수) : 오전 7시 반경 ~ 오후 3시경 종료 예정</span>
+              <span class="badge text-xs font-bold text-blue-600 hidden"></span>
+            </button>
+            <button type="button" onclick="selectTimeOption(this, '2타임(소수) : 오전 10시 반경 ~ 오후 7시 종료 예정')"
+                    class="time-option-btn w-full text-left p-3 border border-gray-200 rounded-xl hover:border-blue-400 flex items-center justify-between text-xs">
+              <span>3) 2타임(소수) : 오전 10시 반경 ~ 오후 7시 종료 예정</span>
+              <span class="badge text-xs font-bold text-blue-600 hidden"></span>
+            </button>
+            <button type="button" onclick="selectTimeOption(this, '1타임(소수) : 오전 10시 반경 ~ 오후 3시경 종료 예정')"
+                    class="time-option-btn w-full text-left p-3 border border-gray-200 rounded-xl hover:border-blue-400 flex items-center justify-between text-xs">
+              <span>4) 1타임(소수) : 오전 10시 반경 ~ 오후 3시경 종료 예정</span>
+              <span class="badge text-xs font-bold text-blue-600 hidden"></span>
+            </button>
+          </div>
         </div>
+
+        <!-- 소속 선택 -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">소속을 선택하여 주십시오 <span class="text-red-500">*</span></label>
+          <select id="affiliation" onchange="toggleAffiliationInfo(this.value)"
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs">
+            <option value="">-- 소속 선택 --</option>
+            <option value="동국대학교">동국대학교</option>
+            <option value="법인">법인</option>
+            <option value="의료원">의료원</option>
+            <option value="산단">산단</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+
+        <!-- 계좌 및 주소 입력 영역 (동국대학교 외 대상자만 노출) -->
+        <div id="extra-info-box" class="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-xl hidden">
+          <p class="text-xs text-amber-800 font-medium">수당 지급을 위한 추가 정보 입력이 필요합니다.</p>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">은행명 <span class="text-red-500">*</span></label>
+            <input type="text" id="bank-name" placeholder="예: 신한은행"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">계좌번호 <span class="text-red-500">*</span></label>
+            <input type="text" id="account-number" placeholder="'-' 없이 숫자만 입력"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">주소 <span class="text-red-500">*</span></label>
+            <input type="text" id="address" placeholder="기본주소 및 상세주소 입력"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- 사전교육 희망일자 (필수) -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">사전교육 희망일자 (전원 필수 선택) <span class="text-red-500">*</span></label>
+          <div class="space-y-2">
+            <label class="flex items-start p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input type="radio" name="training_date" value="1차(경험자 중심) : 2026년 11월 19일(목) 15:00 혜화관 3층 함명희 미래융합세미나실" class="mt-0.5 mr-2">
+              <span class="text-xs">
+                <strong>1차 (경험자 중심)</strong><br>
+                2026년 11월 19일(목) 15:00<br>
+                혜화관 3층 함명희 미래융합세미나실
+              </span>
+            </label>
+            <label class="flex items-start p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input type="radio" name="training_date" value="2차(초보자 중심) : 2026년 11월 20일(금) 10:30 혜화관 2층 고순청세미나실" class="mt-0.5 mr-2">
+              <span class="text-xs">
+                <strong>2차 (초보자 중심)</strong><br>
+                2026년 11월 20일(금) 10:30<br>
+                혜화관 2층 고순청세미나실
+              </span>
+            </label>
+          </div>
+        </div>
+
       </div>
 
       <!-- 개인정보 수집 및 이용 동의 -->
@@ -91,7 +167,7 @@
         <label class="flex items-start">
           <input type="checkbox" id="privacy-agree" required class="w-4 h-4 mt-0.5 text-blue-600 rounded">
           <span class="text-xs text-gray-600 ml-2">
-            [필수] 시험감독 선발 및 일정 조율을 위한 개인정보(성명, 연락처) 수집 및 이용에 동의합니다.
+            [필수] 논술고사 감독위원 선발, 일정 조율 및 수당 지급을 위한 개인정보(성명, 연락처, 계좌 등) 수집 및 이용에 동의합니다.
           </span>
         </label>
       </div>
@@ -105,19 +181,17 @@
     <div id="step-complete" class="text-center py-8 hidden space-y-3">
       <div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">✓</div>
       <h3 class="text-lg font-bold">제출이 완료되었습니다</h3>
-      <p class="text-xs text-gray-500">배정 결과 및 세부 안내는 별도 문자로 발송됩니다.</p>
+      <p class="text-xs text-gray-500">논술고사 감독위원 배정 결과 및 세부 안내는 별도 문자로 발송됩니다.</p>
     </div>
   </div>
 
   <script>
-    // Google Apps Script 웹앱 배포 URL (배포 후 교체)
-    const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
-    // 데이터 암호화용 공개 공개키 (AES-256)
+    // ⚠️ 구글 배포 URL을 입력하세요.
+    const API_URL = "https://script.google.com/macros/s/AKfyc...복사한주소.../exec";
     const PUBLIC_ENCRYPTION_SECRET = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
 
-    let validatedData = null;
+    let rankedTimes = [];
 
-    // 페이지 로드 시 URL 파라미터(?code=...) 확인
     window.addEventListener("DOMContentLoaded", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const codeParam = urlParams.get("code");
@@ -127,6 +201,7 @@
       }
     });
 
+    // 1. 코드 검증 및 기존 제출 여부 확인
     async function verifyCode() {
       const code = document.getElementById("input-code").value.trim().toUpperCase();
       const authMsg = document.getElementById("auth-msg");
@@ -143,12 +218,21 @@
         const data = await res.json();
 
         if (data.success) {
-          validatedData = data;
+          // 이미 작성된 적이 있는 경우 재작성 확인
+          if (data.alreadySubmitted) {
+            const reconfirm = confirm("입력된 정보가 있습니다. 새로 작성하시겠습니까?");
+            if (!reconfirm) return;
+          }
+
           document.getElementById("step-auth").classList.add("hidden");
           document.getElementById("survey-form").classList.remove("hidden");
           document.getElementById("display-assigned-name").textContent = data.assignedTo || "지정인";
+
+          // 성명 및 연락처 자동 기입 (수정 가능)
+          document.getElementById("user-name").value = data.assignedTo || "";
+          document.getElementById("user-phone").value = data.assignedPhone || "";
         } else {
-          authMsg.textContent = data.message || "유효하지 않거나 만료된 코드입니다.";
+          authMsg.textContent = data.message || "유효하지 않은 코드입니다.";
           authMsg.classList.remove("hidden");
         }
       } catch (err) {
@@ -157,46 +241,161 @@
       }
     }
 
+    // 2. 참여 가능 / 불가에 따른 하위 질문 토글
+    function toggleParticipation(isAvailable) {
+      const details = document.getElementById("section-available-details");
+      if (isAvailable) {
+        details.classList.remove("hidden");
+      } else {
+        details.classList.add("hidden");
+      }
+    }
+
+    // 3. 시간대 클릭 순서대로 순위 지정
+    function selectTimeOption(btn, val) {
+      const index = rankedTimes.indexOf(val);
+      if (index > -1) {
+        // 이미 선택된 경우 제거
+        rankedTimes.splice(index, 1);
+      } else {
+        // 추가
+        rankedTimes.push(val);
+      }
+      refreshTimeBadges();
+    }
+
+    function refreshTimeBadges() {
+      const buttons = document.querySelectorAll(".time-option-btn");
+      buttons.forEach(btn => {
+        const spanText = btn.querySelector("span").textContent;
+        const badge = btn.querySelector(".badge");
+        let foundRank = -1;
+
+        rankedTimes.forEach((item, rIdx) => {
+          if (spanText.includes(item.substring(0, 10))) {
+            foundRank = rIdx + 1;
+          }
+        });
+
+        if (foundRank > -1) {
+          btn.classList.add("border-blue-600", "bg-blue-50");
+          badge.textContent = `${foundRank}순위`;
+          badge.classList.remove("hidden");
+        } else {
+          btn.classList.remove("border-blue-600", "bg-blue-50");
+          badge.classList.add("hidden");
+        }
+      });
+    }
+
+    function resetTimeRanking() {
+      rankedTimes = [];
+      refreshTimeBadges();
+    }
+
+    // 4. 소속 선택에 따른 추가 정보 토글
+    function toggleAffiliationInfo(value) {
+      const box = document.getElementById("extra-info-box");
+      if (value && value !== "동국대학교") {
+        box.classList.remove("hidden");
+      } else {
+        box.classList.add("hidden");
+      }
+    }
+
+    // 5. 설문 제출
     async function submitSurvey(e) {
       e.preventDefault();
       const submitBtn = document.getElementById("btn-submit");
-      submitBtn.disabled = true;
-      submitBtn.textContent = "제출 중...";
-
       const code = document.getElementById("input-code").value.trim().toUpperCase();
       const name = document.getElementById("user-name").value.trim();
       const phone = document.getElementById("user-phone").value.trim();
-      const participation = document.querySelector('input[name="participate"]:checked').value;
-      const times = Array.from(document.querySelectorAll('input[name="preferred_time"]:checked')).map(el => el.value);
+      const participate = document.querySelector('input[name="participate"]:checked').value;
 
-      // 민감한 개인정보를 클라이언트단에서 1차 AES 암호화
+      let timeResult = "";
+      let affiliation = "";
+      let bankName = "";
+      let accountNumber = "";
+      let address = "";
+      let trainingDate = "";
+
+      if (participate === "참여 가능") {
+        // 시간대 선택 확인
+        if (rankedTimes.length === 0) {
+          alert("선호 근무 시간대를 최소 1개 이상 선택해주세요.");
+          return;
+        }
+
+        // 3타임 우선순위 확인 경고창
+        const isFirstRank3Time = rankedTimes[0].includes("3타임");
+        if (!isFirstRank3Time) {
+          alert("3타임을 선택하지 않는 분은, 상황에 따라 감독위원에 배정되지 못할 수 있습니다.");
+        }
+
+        timeResult = rankedTimes.map((t, idx) => `${idx + 1}순위: ${t}`).join(" | ");
+
+        // 소속 확인
+        affiliation = document.getElementById("affiliation").value;
+        if (!affiliation) {
+          alert("소속을 선택해주세요.");
+          document.getElementById("affiliation").focus();
+          return;
+        }
+
+        // 동국대학교가 아닌 경우 추가 정보 필수 체크
+        if (affiliation !== "동국대학교") {
+          bankName = document.getElementById("bank-name").value.trim();
+          accountNumber = document.getElementById("account-number").value.trim();
+          address = document.getElementById("address").value.trim();
+
+          if (!bankName || !accountNumber || !address) {
+            alert("동국대학교 외 소속인 경우 은행명, 계좌번호, 주소를 모두 입력하셔야 합니다.");
+            return;
+          }
+        }
+
+        // 사전교육 희망일자 확인
+        const selectedTraining = document.querySelector('input[name="training_date"]:checked');
+        if (!selectedTraining) {
+          alert("사전교육 희망일자를 반드시 선택해주세요.");
+          return;
+        }
+        trainingDate = selectedTraining.value;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "제출 중...";
+
+      // 민감 정보 AES 암호화
       const rawPayload = JSON.stringify({
-        name: name,
-        phone: phone,
-        participation: participation,
-        preferred_times: times.join(", "),
+        name,
+        phone,
+        participation: participate,
+        time_priorities: timeResult,
+        affiliation,
+        bank_name: bankName,
+        account_number: accountNumber,
+        address,
+        training_date: trainingDate,
         submitted_at: new Date().toISOString()
       });
 
       const encryptedData = CryptoJS.AES.encrypt(rawPayload, PUBLIC_ENCRYPTION_SECRET).toString();
 
-      // 전송 객체
-      const payload = {
-        action: "submit",
-        code: code,
-        encrypted_payload: encryptedData,
-        // 유출 감지 비교용 평문(또는 해시) 메타정보
-        actual_name: name,
-        actual_phone: phone
-      };
-
       try {
         const res = await fetch(API_URL, {
           method: "POST",
-          body: JSON.stringify(payload)
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "submit",
+            code: code,
+            encrypted_payload: encryptedData,
+            actual_name: name,
+            actual_phone: phone
+          })
         });
-        const result = await res.json();
 
+        const result = await res.json();
         if (result.success) {
           document.getElementById("survey-form").classList.add("hidden");
           document.getElementById("step-complete").classList.remove("hidden");
@@ -206,7 +405,7 @@
           submitBtn.textContent = "제출하기";
         }
       } catch (err) {
-        alert("오류가 발생했습니다. 다시 시도해주세요.");
+        alert("오류가 발생했습니다: " + err.message);
         submitBtn.disabled = false;
         submitBtn.textContent = "제출하기";
       }
