@@ -113,6 +113,21 @@
       return `${num.substring(0, 4)}-${num.substring(4)}`;
     }
 
+// 전화번호 자동 포맷팅 함수
+    function formatPhoneNumber(num) {
+      if (!num) return "";
+      const clean = String(num).replace(/[^0-9]/g, "");
+      if (clean.length === 11) {
+        return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      } else if (clean.length === 10) {
+        if (clean.startsWith("02")) return clean.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+        return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+      } else if (clean.length === 12) {
+        return clean.replace(/(\d{4})(\d{4})(\d{4})/, "$1-$2-$3");
+      }
+      return clean;
+    }
+
     async function registerCodes() {
       const masterKey = document.getElementById("master-key").value.trim();
       const text = document.getElementById("bulk-candidates").value.trim();
@@ -128,7 +143,7 @@
           list.push({
             code: generateCleanCode(),
             name: parts[0],
-            phone: parts[1] || ""
+            phone: formatPhoneNumber(parts[1] || "") // 11~12자리 숫자도 하이픈 자동 변환
           });
         }
       });
