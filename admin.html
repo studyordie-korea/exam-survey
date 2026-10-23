@@ -99,8 +99,10 @@
     </div>
   </div>
 
-  <script>
+<script>
+    // ⚠️ 현재 사용 중인 구글 배포 URL을 그대로 넣어주세요.
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
+    
     let cachedSubmissions = [];
 
     // 가독성 높은 6자리 난수 생성기 (입력 혼동을 주는 0, O, 1, I 제외)
@@ -113,86 +115,147 @@
       return code;
     }
 
+    // 1. 코드 생성 및 구글 시트 등록
     async function registerCodes() {
-  const masterKey = document.getElementById("master-key").value.trim();
-  const text = document.getElementById("bulk-candidates").value.trim();
-  const uploadBtn = event.target; // 클릭된 버튼
+      const masterKey = document.getElementById("master-key").value.trim();
+      const text = document.getElementById("bulk-candidates").value.trim();
 
-  // 1. 사전 입력값 검증
-  if (!masterKey) {
-    alert("우측 상단에 '복호화 마스터키'를 먼저 입력해주세요.");
-    document.getElementById("master-key").focus();
-    return;
-  }
-  if (!text) {
-    alert("대상자 명단을 1명 이상 입력해주세요.");
-    document.getElementById("bulk-candidates").focus();
-    return;
-  }
-  if (API_URL.includes("YOUR_GAS_DEPLOYMENT_ID")) {
-    alert("API_URL이 아직 설정되지 않았습니다. 구글 웹앱 배포 URL로 변경해주세요.");
-    return;
-  }
+      if (!masterKey) {
+        alert("우측 상단에 '복호화 마스터키'를 먼저 입력해주세요.");
+        document.getElementById("master-key").focus();
+        return;
+      }
+      if (!text) {
+        alert("대상자 명단을 입력해주세요.");
+        document.getElementById("bulk-candidates").focus();
+        return;
+      }
 
-  // 2. 명단 파싱
-  const lines = text.split("\n");
-  const list = [];
-  lines.forEach(line => {
-    const parts = line.split(",").map(p => p.trim());
-    if (parts[0]) {
-      list.push({
-        code: generateCleanCode(),
-        name: parts[0],
-        phone: parts[1] || ""
+      const lines = text.split("\n");
+      const list = [];
+      lines.forEach(line => {
+        const parts = line.split(",").map(p => p.trim());
+        if (parts[0]) {
+          list.push({
+            code: generateCleanCode(),
+            name: parts[0],
+            phone: parts[1] || ""
+          });
+        }
       });
+
+      if (list.length === 0) {
+        alert("유효한 명단 데이터가 없습니다.");
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "register_codes",
+            admin_key: masterKey,
+            codes: list
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          alert(`성공: 총 ${list.length}명의 난수 코드가 등록되었습니다.`);
+          document.getElementById("bulk-candidates").value = "";
+          loadDashboardData(); // 등록 직후 화면 표 새로고침
+        } else {
+          alert("등록 실패: " + (data.message || "서버 응답 오류"));
+        }
+      } catch (err) {
+        alert("서버 통신 실패!\n원인: " + err.message);
+      }
     }
-  });
 
-  if (list.length === 0) {
-    alert("유효한 명단 데이터가 없습니다.");
-    return;
-  }
+    // 2. 대시보드 데이터 조회 및 복호화
+    async function loadDashboardData() {
+      const masterKey = document.getElementById("master-key").value.trim();
+      if (!masterKey) {
+        alert("데이터를 조회하고 복호화하려면 우측 상단에 마스터키를 입력하세요.");
+        return;
+      }
 
-  // 3. 서버 전송 (진행 상태 표시 및 예외 처리)
-  uploadBtn.disabled = true;
-  uploadBtn.textContent = "서버 업로드 중...";
+      try {
+        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(masterKey)}`);
+        const json = await res.json();
 
-  try {
-    // text/plain 방식을 사용하여 CORS 사전요청(OPTIONS) 에러를 방지
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        action: "register_codes",
-        admin_key: masterKey,
-        codes: list
-      })
-    });
+        if (!json.success) {
+          alert(json.message);
+          return;
+        }
 
-    const data = await res.json();
-    if (data.success) {
-      alert(`성공: 총 ${list.length}명의 난수 코드가 등록되었습니다.`);
-      document.getElementById("bulk-candidates").value = "";
-      loadDashboardData();
-    } else {
-      alert("등록 실패: " + (data.message || "서버 응답 오류"));
+        cachedSubmissions = json.data;
+        renderDashboard(json.data, masterKey);
+      } catch (e) {
+        alert("데이터 로드 실패: " + e.message);
+      }
     }
-  } catch (err) {
-    console.error("통신 에러 세부사항:", err);
-    alert("서버 통신 실패!\n\n원인: " + err.message + "\n(구글 배포 권한이나 URL 주소를 확인해주세요.)");
-  } finally {
-    uploadBtn.disabled = false;
-    uploadBtn.textContent = "쉬운 난수 코드 자동 부여 후 서버 업로드";
-  }
-}
 
+    // 3. 표 렌더링
+    function renderDashboard(data, key) {
+      let total = data.length;
+      let completed = 0;
+      let leaks = 0;
+
+      const tbody = document.getElementById("response-table-body");
+      tbody.innerHTML = "";
+
+      data.forEach(item => {
+        let isSubmitted = !!item.encrypted_payload;
+        if (isSubmitted) completed++;
+
+        let isLeak = item.status === "SHARED_SUSPECT";
+        if (isLeak) leaks++;
+
+        let decrypted = { participation: "-", preferred_times: "-" };
+        if (item.encrypted_payload) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(item.encrypted_payload, key);
+            const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+            if (decryptedStr) decrypted = JSON.parse(decryptedStr);
+          } catch (e) {
+            decrypted.participation = "복호화 실패";
+          }
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = isLeak ? "bg-amber-50/70" : "hover:bg-slate-50";
+
+        let statusBadge = isSubmitted 
+          ? (isLeak ? `<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-bold">⚠️ 공유 유출 의심</span>` 
+                    : `<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full">정상 제출</span>`)
+          : `<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">미응답</span>`;
+
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold">${item.code}</td>
+          <td class="p-3">${item.assigned_name} (${item.assigned_phone || "-"})</td>
+          <td class="p-3 font-semibold ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
+          <td class="p-3">${statusBadge}</td>
+          <td class="p-3">${decrypted.participation}</td>
+          <td class="p-3">${decrypted.preferred_times}</td>
+          <td class="p-3 text-slate-400">${item.submitted_at ? item.submitted_at.substring(0, 16).replace("T", " ") : "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("stat-total").textContent = total;
+      document.getElementById("stat-completed").textContent = completed;
+      document.getElementById("stat-pending").textContent = total - completed;
+      document.getElementById("stat-leaks").textContent = leaks;
+    }
+
+    // 4. 엑셀(CSV) 다운로드
     function downloadExcelCSV() {
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
       const masterKey = document.getElementById("master-key").value.trim();
 
-      let csv = "\uFEFF"; // 한글 깨짐 방지 BOM
+      let csv = "\uFEFF";
       csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,유출 상태,참여의사,희망시간대,제출일시\n";
 
       cachedSubmissions.forEach(row => {
