@@ -9,7 +9,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <!-- ================= [1] 관리자 로그인 화면 (최초 노출) ================= -->
+  <!-- ================= [1] 로그인 화면 ================= -->
   <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8 space-y-6">
       <div class="text-center space-y-1">
@@ -22,8 +22,8 @@
 
       <form onsubmit="handleLogin(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">관리자 마스터 비밀번호</label>
-          <input type="password" id="login-password" required placeholder="비밀번호를 입력하세요" autofocus
+          <label class="block text-xs font-semibold text-slate-600 mb-1">관리자 비밀번호</label>
+          <input type="password" id="login-password" required placeholder="관리자 비밀번호 입력" autofocus
                  class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
         </div>
         <p id="login-error-msg" class="text-xs text-red-500 font-medium hidden text-center"></p>
@@ -35,7 +35,7 @@
     </div>
   </div>
 
-  <!-- ================= [2] 관리자 대시보드 화면 (로그인 전에는 완전 숨김) ================= -->
+  <!-- ================= [2] 대시보드 화면 ================= -->
   <div id="dashboard-view" class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 hidden">
     <!-- 헤더 -->
     <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
@@ -73,7 +73,7 @@
       </div>
     </div>
 
-    <!-- 코드 생성 섹션 (0000-000 난수) -->
+    <!-- 코드 생성 섹션 -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
       <h2 class="text-md font-bold">1. 7자리 코드(0000-000) 신규 생성 및 등록</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -95,7 +95,7 @@
       </div>
     </div>
 
-    <!-- 응답 목록 및 복호화 엑셀 다운로드 -->
+    <!-- 응답 현황 테이블 -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <h2 class="text-md font-bold">2. 응답 현황 및 결과 (복호화 뷰어)</h2>
@@ -139,11 +139,11 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
     
-    // 메모리에만 유지되는 인증 마스터키 (새로고침/창 닫기 시 즉시 소멸)
-    let authenticatedMasterKey = "";
+    let savedLoginPwd = "";       // 관리자가 입력한 로그인 비밀번호
+    let cachedDecryptionKey = ""; // 서버에서 넘겨받은 내부 복호화 키
     let cachedSubmissions = [];
 
-    // 1. 관리자 로그인 처리
+    // 1. 관리자 로그인
     async function handleLogin(e) {
       e.preventDefault();
       const pwdInput = document.getElementById("login-password");
@@ -152,29 +152,26 @@
       const inputPwd = pwdInput.value.trim();
 
       errorMsg.classList.add("hidden");
-      errorMsg.textContent = "";
-
       if (!inputPwd) return;
 
       btnLogin.disabled = true;
       btnLogin.textContent = "인증 확인 중...";
 
       try {
-        // 입력한 비밀번호로 백엔드 조회 테스트
-        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(inputPwd)}`);
+        const res = await fetch(`${API_URL}?action=get_data&login_pwd=${encodeURIComponent(inputPwd)}`);
         const json = await res.json();
 
         if (json.success) {
-          // 인증 성공: 메모리에 키 보관 및 대시보드 화면 전환
-          authenticatedMasterKey = inputPwd;
+          savedLoginPwd = inputPwd;
+          cachedDecryptionKey = json.decryption_key;
           cachedSubmissions = json.data;
 
           document.getElementById("login-view").classList.add("hidden");
           document.getElementById("dashboard-view").classList.remove("hidden");
 
-          renderDashboard(json.data, authenticatedMasterKey);
+          renderDashboard(json.data, cachedDecryptionKey);
         } else {
-          errorMsg.textContent = "비밀번호가 일치하지 않습니다.";
+          errorMsg.textContent = json.message || "비밀번호가 일치하지 않습니다.";
           errorMsg.classList.remove("hidden");
           pwdInput.value = "";
           pwdInput.focus();
@@ -188,9 +185,10 @@
       }
     }
 
-    // 2. 로그아웃 처리
+    // 2. 로그아웃
     function handleLogout() {
-      authenticatedMasterKey = "";
+      savedLoginPwd = "";
+      cachedDecryptionKey = "";
       cachedSubmissions = [];
       document.getElementById("login-password").value = "";
       document.getElementById("dashboard-view").classList.add("hidden");
@@ -198,21 +196,21 @@
       document.getElementById("login-password").focus();
     }
 
-    // 3. 대시보드 데이터 새로고침
+    // 3. 데이터 동기화
     async function loadDashboardData() {
-      if (!authenticatedMasterKey) return handleLogout();
+      if (!savedLoginPwd) return handleLogout();
 
       try {
-        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(authenticatedMasterKey)}`);
+        const res = await fetch(`${API_URL}?action=get_data&login_pwd=${encodeURIComponent(savedLoginPwd)}`);
         const json = await res.json();
 
         if (!json.success) {
-          alert("인증이 만료되었거나 오류가 발생했습니다: " + json.message);
+          alert("세션 오류: " + json.message);
           return handleLogout();
         }
 
         cachedSubmissions = json.data;
-        renderDashboard(json.data, authenticatedMasterKey);
+        renderDashboard(json.data, cachedDecryptionKey);
       } catch (e) {
         alert("데이터 갱신 실패: " + e.message);
       }
@@ -226,23 +224,16 @@
     function formatPhoneNumber(num) {
       if (!num) return "";
       const clean = String(num).replace(/[^0-9]/g, "");
-      if (clean.length === 11) {
-        return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-      } else if (clean.length === 10) {
-        if (clean.startsWith("02")) return clean.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
-        return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-      } else if (clean.length === 12) {
-        return clean.replace(/(\d{4})(\d{4})(\d{4})/, "$1-$2-$3");
-      }
+      if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
       return clean;
     }
 
-    // 4. 대상자 코드 등록
+    // 4. 대상자 등록
     async function registerCodes() {
-      if (!authenticatedMasterKey) return handleLogout();
+      if (!savedLoginPwd) return handleLogout();
       const text = document.getElementById("bulk-candidates").value.trim();
-
-      if (!text) return alert("대상자 명단을 입력해주세요.");
+      if (!text) return alert("명단을 입력해주세요.");
 
       const lines = text.split("\n");
       const list = [];
@@ -263,7 +254,7 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "register_codes",
-            admin_key: authenticatedMasterKey,
+            login_pwd: savedLoginPwd,
             codes: list
           })
         });
@@ -281,9 +272,9 @@
       }
     }
 
-    // 5. 개별 수정 잠금 / 잠금해제 토글
+    // 5. 개별 잠금 토글
     async function toggleLock(code) {
-      if (!authenticatedMasterKey) return handleLogout();
+      if (!savedLoginPwd) return handleLogout();
 
       try {
         const res = await fetch(API_URL, {
@@ -291,7 +282,7 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "toggle_lock",
-            admin_key: authenticatedMasterKey,
+            login_pwd: savedLoginPwd,
             code: code
           })
         });
@@ -299,20 +290,18 @@
         if (data.success) {
           loadDashboardData();
         } else {
-          alert("처리 실패: " + data.message);
+          alert("실패: " + data.message);
         }
       } catch (e) {
         alert("통신 오류: " + e.message);
       }
     }
 
-    // 6. 제출 완료자 전원 일괄 잠금
+    // 6. 일괄 잠금
     async function lockAllSubmitted() {
-      if (!authenticatedMasterKey) return handleLogout();
+      if (!savedLoginPwd) return handleLogout();
 
-      if (!confirm("현재까지 응답을 완료한 모든 지원자의 수정을 잠그시겠습니까?\n잠금 후에는 지원자가 재접속해도 수정할 수 없습니다.")) {
-        return;
-      }
+      if (!confirm("응답을 완료한 전원의 수정을 잠그시겠습니까?")) return;
 
       try {
         const res = await fetch(API_URL, {
@@ -320,15 +309,13 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "lock_all_submitted",
-            admin_key: authenticatedMasterKey
+            login_pwd: savedLoginPwd
           })
         });
         const data = await res.json();
         if (data.success) {
-          alert(`총 ${data.count}건의 응답이 수정 잠금(마감) 처리되었습니다.`);
+          alert(`총 ${data.count}건이 수정 잠금(마감) 처리되었습니다.`);
           loadDashboardData();
-        } else {
-          alert("처리 실패: " + data.message);
         }
       } catch (e) {
         alert("통신 오류: " + e.message);
@@ -417,10 +404,10 @@
       document.getElementById("stat-leaks").textContent = leaks;
     }
 
-    // 8. 엑셀(CSV) 다운로드
+    // 8. 엑셀 다운로드
     function downloadExcelCSV() {
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
-      if (!authenticatedMasterKey) return handleLogout();
+      if (!cachedDecryptionKey) return handleLogout();
 
       let csv = "\uFEFF";
       csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,상태,참여의사,시간대 우선순위,소속,은행명,계좌번호,주소,사전교육 희망일시,제출일시\n";
@@ -429,7 +416,7 @@
         let dec = {};
         if (row.encrypted_payload) {
           try {
-            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, authenticatedMasterKey);
+            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, cachedDecryptionKey);
             dec = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
           } catch(e) {}
         }
