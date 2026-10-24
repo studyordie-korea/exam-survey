@@ -9,7 +9,34 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <div class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+  <!-- ================= [1] 관리자 로그인 화면 (최초 노출) ================= -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8 space-y-6">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto text-xl font-bold shadow-md">
+          🔒
+        </div>
+        <h1 class="text-lg font-bold text-slate-900 pt-2">관리자 보안 로그인</h1>
+        <p class="text-xs text-slate-500">논술고사 감독위원 관리 시스템</p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">관리자 마스터 비밀번호</label>
+          <input type="password" id="login-password" required placeholder="비밀번호를 입력하세요" autofocus
+                 class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
+        </div>
+        <p id="login-error-msg" class="text-xs text-red-500 font-medium hidden text-center"></p>
+
+        <button type="submit" id="btn-login" class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 shadow-md transition text-sm">
+          관리자 콘솔 접속
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= [2] 관리자 대시보드 화면 (로그인 전에는 완전 숨김) ================= -->
+  <div id="dashboard-view" class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 hidden">
     <!-- 헤더 -->
     <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
       <div>
@@ -17,10 +44,11 @@
         <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지, 수정 잠금(마감) 및 데이터 복호화</p>
       </div>
       <div class="flex items-center gap-2">
-        <input type="password" id="master-key" placeholder="복호화 마스터키" value="EXAM_PROCTOR_AES_SECURE_KEY_2026"
-               class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <button onclick="loadDashboardData()" class="bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-800">
-          데이터 동기화
+        <button onclick="loadDashboardData()" class="bg-blue-600 text-white text-xs font-semibold px-3.5 py-2.5 rounded-lg hover:bg-blue-700 transition">
+          🔄 데이터 새로고침
+        </button>
+        <button onclick="handleLogout()" class="bg-slate-200 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg hover:bg-slate-300 transition">
+          로그아웃
         </button>
       </div>
     </header>
@@ -100,7 +128,7 @@
           </thead>
           <tbody id="response-table-body" class="divide-y text-slate-700">
             <tr>
-              <td colspan="11" class="p-4 text-center text-slate-400">우측 상단 '데이터 동기화'를 눌러주세요.</td>
+              <td colspan="11" class="p-4 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
             </tr>
           </tbody>
         </table>
@@ -110,7 +138,85 @@
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
+    
+    // 메모리에만 유지되는 인증 마스터키 (새로고침/창 닫기 시 즉시 소멸)
+    let authenticatedMasterKey = "";
     let cachedSubmissions = [];
+
+    // 1. 관리자 로그인 처리
+    async function handleLogin(e) {
+      e.preventDefault();
+      const pwdInput = document.getElementById("login-password");
+      const errorMsg = document.getElementById("login-error-msg");
+      const btnLogin = document.getElementById("btn-login");
+      const inputPwd = pwdInput.value.trim();
+
+      errorMsg.classList.add("hidden");
+      errorMsg.textContent = "";
+
+      if (!inputPwd) return;
+
+      btnLogin.disabled = true;
+      btnLogin.textContent = "인증 확인 중...";
+
+      try {
+        // 입력한 비밀번호로 백엔드 조회 테스트
+        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(inputPwd)}`);
+        const json = await res.json();
+
+        if (json.success) {
+          // 인증 성공: 메모리에 키 보관 및 대시보드 화면 전환
+          authenticatedMasterKey = inputPwd;
+          cachedSubmissions = json.data;
+
+          document.getElementById("login-view").classList.add("hidden");
+          document.getElementById("dashboard-view").classList.remove("hidden");
+
+          renderDashboard(json.data, authenticatedMasterKey);
+        } else {
+          errorMsg.textContent = "비밀번호가 일치하지 않습니다.";
+          errorMsg.classList.remove("hidden");
+          pwdInput.value = "";
+          pwdInput.focus();
+        }
+      } catch (err) {
+        errorMsg.textContent = "서버 통신 실패: " + err.message;
+        errorMsg.classList.remove("hidden");
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = "관리자 콘솔 접속";
+      }
+    }
+
+    // 2. 로그아웃 처리
+    function handleLogout() {
+      authenticatedMasterKey = "";
+      cachedSubmissions = [];
+      document.getElementById("login-password").value = "";
+      document.getElementById("dashboard-view").classList.add("hidden");
+      document.getElementById("login-view").classList.remove("hidden");
+      document.getElementById("login-password").focus();
+    }
+
+    // 3. 대시보드 데이터 새로고침
+    async function loadDashboardData() {
+      if (!authenticatedMasterKey) return handleLogout();
+
+      try {
+        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(authenticatedMasterKey)}`);
+        const json = await res.json();
+
+        if (!json.success) {
+          alert("인증이 만료되었거나 오류가 발생했습니다: " + json.message);
+          return handleLogout();
+        }
+
+        cachedSubmissions = json.data;
+        renderDashboard(json.data, authenticatedMasterKey);
+      } catch (e) {
+        alert("데이터 갱신 실패: " + e.message);
+      }
+    }
 
     function generateCleanCode() {
       const num = String(Math.floor(1000000 + Math.random() * 9000000));
@@ -131,11 +237,11 @@
       return clean;
     }
 
+    // 4. 대상자 코드 등록
     async function registerCodes() {
-      const masterKey = document.getElementById("master-key").value.trim();
+      if (!authenticatedMasterKey) return handleLogout();
       const text = document.getElementById("bulk-candidates").value.trim();
 
-      if (!masterKey) return alert("마스터키를 입력해주세요.");
       if (!text) return alert("대상자 명단을 입력해주세요.");
 
       const lines = text.split("\n");
@@ -157,7 +263,7 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "register_codes",
-            admin_key: masterKey,
+            admin_key: authenticatedMasterKey,
             codes: list
           })
         });
@@ -175,27 +281,9 @@
       }
     }
 
-    async function loadDashboardData() {
-      const masterKey = document.getElementById("master-key").value.trim();
-      if (!masterKey) return alert("마스터키를 입력하세요.");
-
-      try {
-        const res = await fetch(`${API_URL}?action=get_data&admin_key=${encodeURIComponent(masterKey)}`);
-        const json = await res.json();
-
-        if (!json.success) return alert(json.message);
-
-        cachedSubmissions = json.data;
-        renderDashboard(json.data, masterKey);
-      } catch (e) {
-        alert("데이터 로드 실패: " + e.message);
-      }
-    }
-
-    // 개별 수정 잠금 / 잠금해제 토글
+    // 5. 개별 수정 잠금 / 잠금해제 토글
     async function toggleLock(code) {
-      const masterKey = document.getElementById("master-key").value.trim();
-      if (!masterKey) return alert("마스터키를 입력하세요.");
+      if (!authenticatedMasterKey) return handleLogout();
 
       try {
         const res = await fetch(API_URL, {
@@ -203,7 +291,7 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "toggle_lock",
-            admin_key: masterKey,
+            admin_key: authenticatedMasterKey,
             code: code
           })
         });
@@ -218,10 +306,9 @@
       }
     }
 
-    // 제출 완료자 전원 일괄 잠금
+    // 6. 제출 완료자 전원 일괄 잠금
     async function lockAllSubmitted() {
-      const masterKey = document.getElementById("master-key").value.trim();
-      if (!masterKey) return alert("마스터키를 입력하세요.");
+      if (!authenticatedMasterKey) return handleLogout();
 
       if (!confirm("현재까지 응답을 완료한 모든 지원자의 수정을 잠그시겠습니까?\n잠금 후에는 지원자가 재접속해도 수정할 수 없습니다.")) {
         return;
@@ -233,7 +320,7 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "lock_all_submitted",
-            admin_key: masterKey
+            admin_key: authenticatedMasterKey
           })
         });
         const data = await res.json();
@@ -248,6 +335,7 @@
       }
     }
 
+    // 7. 대시보드 렌더링
     function renderDashboard(data, key) {
       let total = data.length;
       let completed = 0;
@@ -297,7 +385,6 @@
           badgeClass = "bg-red-100 text-red-700 font-bold";
         }
 
-        // 잠금/잠금해제 버튼
         let lockBtn = `
           <button onclick="toggleLock('${item.code}')" class="px-2 py-1 text-[11px] rounded border font-medium transition ${
             isLocked 
@@ -330,9 +417,10 @@
       document.getElementById("stat-leaks").textContent = leaks;
     }
 
+    // 8. 엑셀(CSV) 다운로드
     function downloadExcelCSV() {
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
-      const masterKey = document.getElementById("master-key").value.trim();
+      if (!authenticatedMasterKey) return handleLogout();
 
       let csv = "\uFEFF";
       csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,상태,참여의사,시간대 우선순위,소속,은행명,계좌번호,주소,사전교육 희망일시,제출일시\n";
@@ -341,7 +429,7 @@
         let dec = {};
         if (row.encrypted_payload) {
           try {
-            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, masterKey);
+            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, authenticatedMasterKey);
             dec = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
           } catch(e) {}
         }
