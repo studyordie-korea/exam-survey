@@ -10,13 +10,14 @@
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-3 text-gray-800">
 
   <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+    <!-- 헤더 -->
     <div class="text-center mb-6">
       <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">공식 인증 신청서</span>
       <h1 class="text-xl font-bold mt-2">논술고사 감독위원 신청</h1>
       <p class="text-xs text-gray-500 mt-1">발급받은 7자리 코드로 인증된 분만 참여 가능합니다.</p>
     </div>
 
-    <!-- 1단계: 7자리 코드 인증 -->
+    <!-- 1단계: 7자리 코드 인증 (0000-000 자동 하이픈) -->
     <div id="step-auth" class="space-y-4">
       <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1">발급받은 입장코드 (7자리 숫자)</label>
@@ -27,17 +28,19 @@
             인증확인
           </button>
         </div>
+        <!-- 에러 또는 마감/잠금 안내 박스 -->
         <div id="auth-msg" class="mt-3 hidden"></div>
       </div>
     </div>
 
     <!-- 2단계: 설문 폼 -->
     <form id="survey-form" class="space-y-6 hidden" onsubmit="submitSurvey(event)">
+      <!-- 인증 완료 안내 및 상단 로그아웃 버튼 -->
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs flex justify-between items-center text-blue-900">
         <div>
           코드 인증 완료: <span id="display-assigned-name" class="font-bold"></span> 님
         </div>
-        <button type="button" onclick="logout()" class="text-[11px] bg-white border border-blue-200 px-2.5 py-1 rounded-lg text-gray-600 hover:text-red-600 font-medium shadow-sm">
+        <button type="button" onclick="logout()" class="text-[11px] bg-white border border-blue-200 px-2.5 py-1 rounded-lg text-gray-600 hover:text-red-600 font-medium shadow-sm transition">
           로그아웃
         </button>
       </div>
@@ -56,7 +59,7 @@
         </div>
       </div>
 
-      <!-- 참여 의사 -->
+      <!-- 논술고사 참여 의사 -->
       <div>
         <label class="block text-xs font-semibold text-gray-700 mb-1">논술고사 참여 의사 <span class="text-red-500">*</span></label>
         <p class="text-xs text-blue-600 font-medium mb-2">※ 올해 논술고사는 2026년 11월 22일(일)입니다.</p>
@@ -72,8 +75,10 @@
         </div>
       </div>
 
-      <!-- 상세 영역 -->
+      <!-- 참여 가능자 전용 상세 영역 -->
       <div id="section-available-details" class="space-y-6 hidden">
+
+        <!-- 선호 근무 시간대 순위 선택 -->
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="block text-xs font-semibold text-gray-700">선호 근무 시간대 (1순위 필수 선택) <span class="text-red-500">*</span></label>
@@ -108,6 +113,7 @@
           </div>
         </div>
 
+        <!-- 소속 선택 -->
         <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">소속을 선택하여 주십시오 <span class="text-red-500">*</span></label>
           <select id="affiliation" onchange="toggleAffiliationInfo(this.value)"
@@ -121,6 +127,7 @@
           </select>
         </div>
 
+        <!-- 계좌 및 주소 입력 (동국대학교 외 선택 시 노출) -->
         <div id="extra-info-box" class="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-xl hidden">
           <p class="text-xs text-amber-800 font-semibold">수당 지급을 위한 추가 정보 입력이 필요합니다.</p>
           <div>
@@ -140,6 +147,7 @@
           </div>
         </div>
 
+        <!-- 사전교육 희망일자 (전원 필수) -->
         <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">사전교육 희망일자 (전원 필수 선택) <span class="text-red-500">*</span></label>
           <div class="space-y-2">
@@ -161,9 +169,10 @@
             </label>
           </div>
         </div>
+
       </div>
 
-      <!-- 개인정보 동의 -->
+      <!-- 개인정보 동의 (참여 가능자만 필수) -->
       <div id="privacy-agree-wrapper" class="pt-2">
         <label class="flex items-start cursor-pointer">
           <input type="checkbox" id="privacy-agree" class="w-4 h-4 mt-0.5 text-blue-600 rounded">
@@ -173,6 +182,7 @@
         </label>
       </div>
 
+      <!-- 제출 버튼 -->
       <button type="submit" id="btn-submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md transition">
         제출하기
       </button>
@@ -200,15 +210,6 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
     const PUBLIC_ENCRYPTION_SECRET = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
 
-    function formatPhoneNumber(num) {
-      if (!num) return "";
-      let clean = String(num).replace(/[^0-9]/g, "");
-      if (clean.length === 10 && clean.startsWith("10")) clean = "0" + clean;
-      if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-      if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-      return clean;
-    }
-
     const TIME_OPTIONS = {
       1: "3타임 가능(대부분) : 오전 7시 반경 ~ 오후 7시 종료 예정",
       2: "2타임(소수) : 오전 7시 반경 ~ 오후 3시경 종료 예정",
@@ -218,6 +219,25 @@
     let rankedTimeIds = [];
     let hasWarned3Time = false;
 
+    // 0. 제출 버튼 강제 활성화 및 텍스트 원복 함수
+    function resetSubmitButton() {
+      const submitBtn = document.getElementById("btn-submit");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "제출하기";
+      }
+    }
+
+    function formatPhoneNumber(num) {
+      if (!num) return "";
+      let clean = String(num).replace(/[^0-9]/g, "");
+      if (clean.length === 10 && clean.startsWith("10")) clean = "0" + clean;
+      if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+      return clean;
+    }
+
+    // 코드 입력 시 0000-000 자동 하이픈
     const inputCodeEl = document.getElementById("input-code");
     inputCodeEl.addEventListener("input", (e) => {
       let val = e.target.value.replace(/[^0-9]/g, "").slice(0, 7);
@@ -232,13 +252,17 @@
       }
     });
 
+    // 휴대폰 번호 입력 시 자동 포맷팅
     const phoneInputEl = document.getElementById("user-phone");
     phoneInputEl.addEventListener("input", (e) => {
       e.target.value = formatPhoneNumber(e.target.value);
     });
 
-    window.addEventListener("DOMContentLoaded", () => {
+    // 페이지 진입 및 BFCache 복원 시 초기화 보장
+    function initPage() {
+      resetSubmitButton();
       resetTimeRanking();
+
       const urlParams = new URLSearchParams(window.location.search);
       const codeParam = urlParams.get("code");
       if (codeParam) {
@@ -247,7 +271,10 @@
         document.getElementById("input-code").value = clean;
         verifyCode();
       }
-    });
+    }
+
+    window.addEventListener("DOMContentLoaded", initPage);
+    window.addEventListener("pageshow", resetSubmitButton); // 브라우저 뒤로가기/복원 대응
 
     // 1. 코드 검증
     async function verifyCode() {
@@ -272,6 +299,7 @@
         const res = await fetch(`${API_URL}?action=verify&code=${encodeURIComponent(code)}`);
         const data = await res.json();
 
+        // ⚠️ 관리자가 정보를 확인하여 수정을 잠근 경우
         if (data.isLocked) {
           authMsg.innerHTML = `
             <div class="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-left text-xs text-amber-900 space-y-1">
@@ -308,6 +336,7 @@
           document.getElementById("user-phone").value = formatPhoneNumber(data.assignedPhone || "");
 
           resetTimeRanking();
+          resetSubmitButton(); // 설문지 열릴 때 제출 버튼 활성 상태 보장
         } else {
           authMsg.innerHTML = `<p class="text-xs text-red-500">${data.message || "유효하지 않은 코드입니다."}</p>`;
           authMsg.classList.remove("hidden");
@@ -321,6 +350,7 @@
       }
     }
 
+    // 2. 로그아웃
     function logout() {
       document.getElementById("survey-form").reset();
       document.getElementById("step-auth").classList.remove("hidden");
@@ -328,11 +358,15 @@
       document.getElementById("step-complete").classList.add("hidden");
       document.getElementById("input-code").value = "";
       document.getElementById("auth-msg").classList.add("hidden");
+      
       resetTimeRanking();
+      resetSubmitButton();
       toggleParticipation(false);
+
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
+    // 3. 창 닫기
     function closeWindow() {
       window.open('', '_self', '');
       window.close();
@@ -341,6 +375,7 @@
       }, 300);
     }
 
+    // 4. 참여 여부 토글 (참여 불가 시 동의 해제)
     function toggleParticipation(isAvailable) {
       const details = document.getElementById("section-available-details");
       const privacyAgree = document.getElementById("privacy-agree");
@@ -358,8 +393,10 @@
         privacyBadge.textContent = "[선택]";
         privacyBadge.className = "text-gray-400 font-semibold";
       }
+      resetSubmitButton();
     }
 
+    // 5. 시간대 순위 관리
     function toggleTimeOption(id) {
       const numId = parseInt(id, 10);
       const index = rankedTimeIds.indexOf(numId);
@@ -407,7 +444,7 @@
       }
     }
 
-    // 2. 설문 제출 (이름/번호는 평문으로, 계좌/주소 등 민감정보만 암호화)
+    // 6. 설문 최종 제출
     async function submitSurvey(e) {
       e.preventDefault();
       const submitBtn = document.getElementById("btn-submit");
@@ -428,20 +465,22 @@
         if (!privacyAgree.checked) {
           alert("논술고사 감독위원 참여를 위해 개인정보 수집 및 이용에 동의해주세요.");
           privacyAgree.focus();
+          resetSubmitButton();
           return;
         }
 
         if (rankedTimeIds.length === 0) {
           alert("선호 근무 시간대를 최소 1개 이상(1순위) 반드시 선택해주세요.");
+          resetSubmitButton();
           return;
         }
 
+        // 3타임 미선택 최초 1회 경고
         if (rankedTimeIds[0] !== 1 && !hasWarned3Time) {
           hasWarned3Time = true;
           const proceed = confirm("3타임을 선택하지 않는 분은, 상황에 따라 감독위원에 배정되지 못할 수 있습니다.\n\n그래도 현재 선택하신 시간대로 제출하시겠습니까?");
           if (!proceed) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "제출하기";
+            resetSubmitButton();
             return;
           }
         }
@@ -452,6 +491,7 @@
         if (!affiliation) {
           alert("소속을 선택해주세요.");
           document.getElementById("affiliation").focus();
+          resetSubmitButton();
           return;
         }
 
@@ -462,6 +502,7 @@
 
           if (!bankName || !accountNumber || !address) {
             alert("동국대학교 외 소속인 경우 은행명, 계좌번호, 주소를 모두 입력하셔야 합니다.");
+            resetSubmitButton();
             return;
           }
         }
@@ -469,11 +510,13 @@
         const selectedTraining = document.querySelector('input[name="training_date"]:checked');
         if (!selectedTraining) {
           alert("사전교육 희망일자를 반드시 선택해주세요.");
+          resetSubmitButton();
           return;
         }
         trainingDate = selectedTraining.value;
       }
 
+      // 제출 진행 상태로 전환
       submitBtn.disabled = true;
       submitBtn.textContent = "제출 중...";
 
@@ -529,13 +572,11 @@
           document.getElementById("step-complete").classList.remove("hidden");
         } else {
           alert("제출 실패: " + result.message);
-          submitBtn.disabled = false;
-          submitBtn.textContent = "제출하기";
+          resetSubmitButton();
         }
       } catch (err) {
         alert("통신 오류가 발생했습니다: " + err.message);
-        submitBtn.disabled = false;
-        submitBtn.textContent = "제출하기";
+        resetSubmitButton();
       }
     }
   </script>
