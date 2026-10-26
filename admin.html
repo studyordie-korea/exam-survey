@@ -9,7 +9,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <!-- ================= [1] 로그인 화면 ================= -->
+  <!-- [1] 로그인 화면 -->
   <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8 space-y-6">
       <div class="text-center space-y-1">
@@ -35,13 +35,12 @@
     </div>
   </div>
 
-  <!-- ================= [2] 대시보드 화면 ================= -->
+  <!-- [2] 대시보드 화면 -->
   <div id="dashboard-view" class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 hidden">
-    <!-- 헤더 -->
     <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">논술고사 감독위원 관리 콘솔</h1>
-        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지, 수정 잠금(마감) 및 데이터 복호화</p>
+        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지, 수정 잠금 및 응답 결과 뷰어</p>
       </div>
       <div class="flex items-center gap-2">
         <button onclick="loadDashboardData()" class="bg-blue-600 text-white text-xs font-semibold px-3.5 py-2.5 rounded-lg hover:bg-blue-700 transition">
@@ -60,7 +59,7 @@
         <div id="stat-total" class="text-2xl font-bold mt-1 text-slate-800">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border">
-        <div class="text-xs text-slate-500 font-medium">응답 완료(재작성 포함)</div>
+        <div class="text-xs text-slate-500 font-medium">총 제출 응답수(재응답 포함)</div>
         <div id="stat-completed" class="text-2xl font-bold mt-1 text-blue-600">-</div>
       </div>
       <div class="bg-white p-4 rounded-xl border">
@@ -75,19 +74,19 @@
 
     <!-- 코드 생성 섹션 -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
-      <h2 class="text-md font-bold">1. 7자리 코드(0000-000) 신규 생성 및 등록</h2>
+      <h2 class="text-md font-bold">1. 7자리 코드(0000-000) 신규 생성 및 시트 등록</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">대상자 명단 (성명, 전화번호 순)</label>
           <textarea id="bulk-candidates" rows="3" placeholder="홍길동, 010-1234-5678&#10;이영희, 010-9876-5432"
                     class="w-full text-xs font-mono p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
           <button onclick="registerCodes()" class="mt-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">
-            0000-000 난수 코드 부여 후 구글 시트 등록
+            난수 코드 부여 후 구글 시트 등록
           </button>
         </div>
         <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-2">
           <p class="font-bold text-slate-700">문자 발송 URL 안내</p>
-          <p class="text-slate-500">생성된 7자리 코드를 붙여 문자로 발송하시면 원클릭 인증됩니다:</p>
+          <p class="text-slate-500">생성된 7자리 코드를 붙여 문자로 발송하시면 바로 인증됩니다:</p>
           <code class="block bg-white p-2 rounded border text-blue-600 break-all font-mono">
             https://studyordie-korea.github.io/exam-survey/index.html?code=0000-000
           </code>
@@ -95,7 +94,7 @@
       </div>
     </div>
 
-    <!-- 응답 현황 테이블 -->
+    <!-- 응답 목록 및 복호화 엑셀 다운로드 -->
     <div class="bg-white rounded-xl border p-5 space-y-4">
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <h2 class="text-md font-bold">2. 응답 현황 및 결과 (복호화 뷰어)</h2>
@@ -139,11 +138,11 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
     
-    let savedLoginPwd = "";       // 관리자가 입력한 로그인 비밀번호
-    let cachedDecryptionKey = ""; // 서버에서 넘겨받은 내부 복호화 키
+    let savedLoginPwd = "";
+    let cachedDecryptionKey = "";
     let cachedSubmissions = [];
 
-    // 1. 관리자 로그인
+    // 로그인
     async function handleLogin(e) {
       e.preventDefault();
       const pwdInput = document.getElementById("login-password");
@@ -185,7 +184,6 @@
       }
     }
 
-    // 2. 로그아웃
     function handleLogout() {
       savedLoginPwd = "";
       cachedDecryptionKey = "";
@@ -196,7 +194,6 @@
       document.getElementById("login-password").focus();
     }
 
-    // 3. 데이터 동기화
     async function loadDashboardData() {
       if (!savedLoginPwd) return handleLogout();
 
@@ -229,7 +226,7 @@
       return clean;
     }
 
-    // 4. 대상자 등록
+    // 명단 등록 (이름과 전화번호를 평문으로 깔끔하게 등록)
     async function registerCodes() {
       if (!savedLoginPwd) return handleLogout();
       const text = document.getElementById("bulk-candidates").value.trim();
@@ -272,7 +269,6 @@
       }
     }
 
-    // 5. 개별 잠금 토글
     async function toggleLock(code) {
       if (!savedLoginPwd) return handleLogout();
 
@@ -297,7 +293,6 @@
       }
     }
 
-    // 6. 일괄 잠금
     async function lockAllSubmitted() {
       if (!savedLoginPwd) return handleLogout();
 
@@ -322,7 +317,7 @@
       }
     }
 
-    // 7. 대시보드 렌더링
+    // 대시보드 렌더링 (다중 응답 건도 그대로 행으로 렌더링)
     function renderDashboard(data, key) {
       let total = data.length;
       let completed = 0;
@@ -359,11 +354,11 @@
         let statusText = item.status;
         let badgeClass = "bg-gray-100 text-gray-500";
         if (item.status === "NORMAL") {
-          statusText = "정상 제출";
+          statusText = "1차 제출";
           badgeClass = "bg-green-100 text-green-700";
         } else if (item.status === "RESUBMITTED") {
-          statusText = "신규 재작성";
-          badgeClass = "bg-blue-100 text-blue-700";
+          statusText = "재응답";
+          badgeClass = "bg-blue-100 text-blue-700 font-semibold";
         } else if (item.status === "LOCKED") {
           statusText = "🔒 확인(마감)";
           badgeClass = "bg-indigo-100 text-indigo-700 font-semibold";
@@ -385,7 +380,7 @@
         tr.innerHTML = `
           <td class="p-2.5 font-mono font-bold whitespace-nowrap">${item.code}</td>
           <td class="p-2.5 whitespace-nowrap">${item.assigned_name} (${item.assigned_phone || "-"})</td>
-          <td class="p-2.5 font-semibold whitespace-nowrap ${isLeak ? 'text-red-600' : ''}">${item.actual_name || "-"}</td>
+          <td class="p-2.5 font-semibold whitespace-nowrap ${isLeak ? 'text-red-600 font-bold' : ''}">${item.actual_name || "-"}</td>
           <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] ${badgeClass}">${statusText}</span></td>
           <td class="p-2.5 whitespace-nowrap">${lockBtn}</td>
           <td class="p-2.5 font-medium whitespace-nowrap">${dec.participation || '-'}</td>
@@ -404,7 +399,6 @@
       document.getElementById("stat-leaks").textContent = leaks;
     }
 
-    // 8. 엑셀 다운로드
     function downloadExcelCSV() {
       if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
       if (!cachedDecryptionKey) return handleLogout();
