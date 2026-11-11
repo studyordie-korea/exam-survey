@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>논술고사 감독위원 신청 (선착순 배정)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body id="page-body" class="bg-gray-100 min-h-screen flex items-center justify-center p-3 text-gray-800 transition-colors duration-300">
+
+  <div id="card-container" class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-transparent transition-all duration-300">
+    <!-- 헤더 -->
+    <div class="text-center mb-6">
+      <span id="header-badge" class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors duration-300">선착순 잔여석 배정</span>
+      <h1 class="text-xl font-bold mt-2">논술고사 감독위원 신청</h1>
+      <p class="text-xs text-gray-500 mt-1">발급받은 7자리 코드로 인증된 분만 참여 가능합니다.</p>
+    </div>
+
+    <!-- 1단계: 7자리 코드 인증 (0000-000 자동 하이픈) -->
+    <div id="step-auth" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">발급받은 입장코드 (7자리 숫자)</label>
+        <div class="flex gap-2">
+          <input type="tel" id="input-code" inputmode="numeric" maxlength="8" placeholder="0000-000"
+                 class="w-full font-mono text-center text-xl font-bold tracking-widest px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <button type="button" id="btn-verify" onclick="verifyCode()" class="bg-blue-600 text-white font-medium px-5 py-3 rounded-xl hover:bg-blue-700 whitespace-nowrap transition">
+            인증확인
+          </button>
+        </div>
+        <div id="auth-msg" class="mt-3 hidden"></div>
+      </div>
+    </div>
+
+    <!-- 2단계: 설문 폼 -->
+    <form id="survey-form" class="space-y-6 hidden" onsubmit="submitSurvey(event)">
+      <!-- 인증 완료 안내 및 상단 로그아웃 버튼 -->
+      <div id="auth-banner" class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs flex justify-between items-center text-blue-900 transition-colors duration-300">
+        <div>
+          코드 인증 완료: <span id="display-assigned-name" class="font-bold"></span> 님
+        </div>
+        <button type="button" onclick="logout()" class="text-[11px] bg-white border border-blue-200 px-2.5 py-1 rounded-lg text-gray-600 hover:text-red-600 font-medium shadow-sm transition">
+          로그아웃
+        </button>
+      </div>
+
+      <!-- 성함 / 연락처 -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">성명 <span class="text-red-500">*</span></label>
+          <input type="text" id="user-name" required placeholder="홍길동"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm transition-all duration-200">
+          <p id="name-mismatch-msg" class="text-xs text-red-600 font-bold mt-1.5 hidden flex items-center gap-1">
+            <span>⚠️</span> 인증되지 않은 사용자입니다.
+          </p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">휴대폰 번호 <span class="text-red-500">*</span></label>
+          <input type="tel" id="user-phone" required placeholder="010-0000-0000" inputmode="numeric"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-mono">
+        </div>
+      </div>
+
+      <!-- 논술고사 참여 의사 -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">논술고사 참여 의사 <span class="text-red-500">*</span></label>
+        <p class="text-xs text-blue-600 font-medium mb-2">※ 올해 논술고사는 2026년 11월 22일(일)입니다.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+            <input type="radio" name="participate" value="참여 가능" required onchange="toggleParticipation(true)" class="mr-2">
+            <span class="text-sm font-medium">참여 가능</span>
+          </label>
+          <label class="flex items-center justify-center p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+            <input type="radio" name="participate" value="참여 불가" required onchange="toggleParticipation(false)" class="mr-2">
+            <span class="text-sm font-medium">참여 불가</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 참여 가능자 전용 상세 영역 -->
+      <div id="section-available-details" class="space-y-6 hidden">
+
+        <!-- 근무 시간대 선착순 단일 선택 영역 -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-xs font-semibold text-gray-700">희망 근무 시간대 선택 (선착순 1개 선택) <span class="text-red-500">*</span></label>
+            <button type="button" onclick="fetchSlotAvailability()" class="text-[11px] text-blue-600 hover:underline flex items-center gap-0.5">
+              <span>🔄</span> 잔여석 새로고침
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">
+            ※ 실시간 선착순으로 잔여석이 마감됩니다. 마감된 시간대는 선택할 수 없습니다.<br>
+            ※ 고사 상황에 따라 출근 시각은 다소 변동될 수 있으며 고사 전일 최종 통보됩니다.
+          </p>
+
+          <div class="space-y-2.5" id="slot-buttons-container">
+            <!-- 1번 시간대 -->
+            <button type="button" id="slot-btn-1" onclick="selectSlot(1)"
+                    class="slot-btn w-full text-left p-3.5 border border-gray-200 rounded-xl hover:border-blue-400 flex flex-col gap-1 text-xs transition relative">
+              <div class="flex justify-between items-center w-full">
+                <span class="font-bold text-gray-800">1) 3타임 가능 (대부분 권장)</span>
+                <span id="slot-badge-1" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">확인 중...</span>
+              </div>
+              <span class="text-[11px] text-gray-500">오전 7시 반경 ~ 오후 7시 종료 예정</span>
+            </button>
+
+            <!-- 2번 시간대 -->
+            <button type="button" id="slot-btn-2" onclick="selectSlot(2)"
+                    class="slot-btn w-full text-left p-3.5 border border-gray-200 rounded-xl hover:border-blue-400 flex flex-col gap-1 text-xs transition relative">
+              <div class="flex justify-between items-center w-full">
+                <span class="font-bold text-gray-800">2) 2타임 (오전/소수)</span>
+                <span id="slot-badge-2" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">확인 중...</span>
+              </div>
+              <span class="text-[11px] text-gray-500">오전 7시 반경 ~ 오후 3시경 종료 예정</span>
+            </button>
+
+            <!-- 3번 시간대 -->
+            <button type="button" id="slot-btn-3" onclick="selectSlot(3)"
+                    class="slot-btn w-full text-left p-3.5 border border-gray-200 rounded-xl hover:border-blue-400 flex flex-col gap-1 text-xs transition relative">
+              <div class="flex justify-between items-center w-full">
+                <span class="font-bold text-gray-800">3) 2타임 (오후/소수)</span>
+                <span id="slot-badge-3" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">확인 중...</span>
+              </div>
+              <span class="text-[11px] text-gray-500">오전 10시 반경 ~ 오후 7시 종료 예정</span>
+            </button>
+
+            <!-- 4번 시간대 -->
+            <button type="button" id="slot-btn-4" onclick="selectSlot(4)"
+                    class="slot-btn w-full text-left p-3.5 border border-gray-200 rounded-xl hover:border-blue-400 flex flex-col gap-1 text-xs transition relative">
+              <div class="flex justify-between items-center w-full">
+                <span class="font-bold text-gray-800">4) 1타임 (소수)</span>
+                <span id="slot-badge-4" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">확인 중...</span>
+              </div>
+              <span class="text-[11px] text-gray-500">오전 10시 반경 ~ 오후 3시경 종료 예정</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 소속 선택 -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">소속을 선택하여 주십시오 <span class="text-red-500">*</span></label>
+          <select id="affiliation" onchange="toggleAffiliationInfo(this.value)"
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs bg-white">
+            <option value="">-- 소속 선택 --</option>
+            <option value="동국대학교">동국대학교</option>
+            <option value="법인">법인</option>
+            <option value="의료원">의료원</option>
+            <option value="산단">산단</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+
+        <!-- 계좌 및 주소 입력 (동국대학교 외 선택 시 노출) -->
+        <div id="extra-info-box" class="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-xl hidden">
+          <p class="text-xs text-amber-800 font-semibold">수당 지급을 위한 추가 정보 입력이 필요합니다.</p>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">은행명 <span class="text-red-500">*</span></label>
+            <input type="text" id="bank-name" placeholder="예: 신한은행"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">계좌번호 <span class="text-red-500">*</span></label>
+            <input type="text" id="account-number" placeholder="'-' 없이 숫자만 입력"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">주소 <span class="text-red-500">*</span></label>
+            <input type="text" id="address" placeholder="기본주소 및 상세주소 입력"
+                   class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+          </div>
+        </div>
+
+        <!-- 사전교육 희망일자 (전원 필수) -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">사전교육 희망일자 (전원 필수 선택) <span class="text-red-500">*</span></label>
+          <div class="space-y-2">
+            <label class="flex items-start p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input type="radio" name="training_date" value="1차(경험자 중심) : 2026년 11월 19일(목) 15:00 혜화관 3층 함명희 미래융합세미나실" class="mt-0.5 mr-2">
+              <span class="text-xs">
+                <strong class="text-blue-900">1차 (경험자 중심)</strong><br>
+                2026년 11월 19일(목) 15:00<br>
+                혜화관 3층 함명희 미래융합세미나실
+              </span>
+            </label>
+            <label class="flex items-start p-3 border rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input type="radio" name="training_date" value="2차(초보자 중심) : 2026년 11월 20일(금) 10:30 혜화관 2층 고순청세미나실" class="mt-0.5 mr-2">
+              <span class="text-xs">
+                <strong class="text-blue-900">2차 (초보자 중심)</strong><br>
+                2026년 11월 20일(금) 10:30<br>
+                혜화관 2층 고순청세미나실
+              </span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 개인정보 동의 -->
+      <div id="privacy-agree-wrapper" class="pt-2">
+        <label class="flex items-start cursor-pointer">
+          <input type="checkbox" id="privacy-agree" class="w-4 h-4 mt-0.5 text-blue-600 rounded">
+          <span id="privacy-agree-label" class="text-xs text-gray-600 ml-2 leading-relaxed">
+            <span id="privacy-required-badge" class="text-red-500 font-semibold">[필수]</span> 논술고사 감독위원 선발, 일정 조율 및 수당 지급을 위한 개인정보(성명, 연락처, 계좌 등) 수집 및 이용에 동의합니다.
+          </span>
+        </label>
+      </div>
+
+      <!-- 제출 버튼 -->
+      <button type="submit" id="btn-submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md transition-all duration-200">
+        제출하기
+      </button>
+    </form>
+
+    <!-- 완료 메시지 -->
+    <div id="step-complete" class="text-center py-8 hidden space-y-5">
+      <div id="complete-icon" class="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">✓</div>
+      <div>
+        <h3 id="complete-title" class="text-lg font-bold text-gray-800">제출이 완료되었습니다</h3>
+        <p id="complete-desc" class="text-xs text-gray-600 leading-relaxed px-2 mt-2"></p>
+      </div>
+      <div class="pt-2 space-y-2">
+        <button type="button" onclick="closeWindow()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 shadow transition text-sm">
+          창 닫기
+        </button>
+        <button type="button" onclick="logout()" class="w-full text-xs text-gray-500 hover:text-gray-800 py-2">
+          처음 화면으로 돌아가기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
+    const PUBLIC_ENCRYPTION_SECRET = "EXAM_PROCTOR_AES_SECURE_KEY_2026";
+
+    const TIME_OPTIONS = {
+      1: "3타임 가능 (오전 7시 반경 ~ 오후 7시)",
+      2: "2타임 (오전 7시 반경 ~ 오후 3시경)",
+      3: "2타임 (오전 10시 반경 ~ 오후 7시)",
+      4: "1타임 (오전 10시 반경 ~ 오후 3시경)"
+    };
+
+    let originalVerifiedName = "";
+    let isNameMismatched = false;
+    let selectedSlotId = null; // 선착순 단일 선택 ID (1, 2, 3, 4)
+    let slotsState = {};       // 실시간 정원/잔여석 데이터 저장
+
+    function resetSubmitButton() {
+      const submitBtn = document.getElementById("btn-submit");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "제출하기";
+      }
+    }
+
+    function formatPhoneNumber(num) {
+      if (!num) return "";
+      let clean = String(num).replace(/[^0-9]/g, "");
+      if (clean.length === 10 && clean.startsWith("10")) clean = "0" + clean;
+      if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+      return clean;
+    }
+
+    // 이름 불일치 시 붉은색 경고 테마
+    function updateTheme(isMismatch) {
+      isNameMismatched = isMismatch;
+      const bodyEl = document.getElementById("page-body");
+      const cardEl = document.getElementById("card-container");
+      const badgeEl = document.getElementById("header-badge");
+      const bannerEl = document.getElementById("auth-banner");
+      const nameInput = document.getElementById("user-name");
+      const mismatchMsg = document.getElementById("name-mismatch-msg");
+      const submitBtn = document.getElementById("btn-submit");
+
+      if (isMismatch) {
+        bodyEl.classList.remove("bg-gray-100");
+        bodyEl.classList.add("bg-red-50");
+        cardEl.classList.add("border-2", "border-red-400", "shadow-red-200");
+        cardEl.classList.remove("border-transparent");
+        badgeEl.classList.add("bg-red-100", "text-red-700");
+        badgeEl.classList.remove("bg-blue-100", "text-blue-700");
+        bannerEl.classList.add("bg-red-50", "border-red-300", "text-red-900");
+        bannerEl.classList.remove("bg-blue-50", "border-blue-200", "text-blue-900");
+        nameInput.classList.add("border-red-500", "focus:ring-red-500", "bg-red-50/30");
+        nameInput.classList.remove("border-gray-300", "focus:ring-blue-500");
+        mismatchMsg.classList.remove("hidden");
+        submitBtn.classList.add("bg-red-600", "hover:bg-red-700");
+        submitBtn.classList.remove("bg-blue-600", "hover:bg-blue-700");
+      } else {
+        bodyEl.classList.remove("bg-red-50");
+        bodyEl.classList.add("bg-gray-100");
+        cardEl.classList.remove("border-2", "border-red-400", "shadow-red-200");
+        cardEl.classList.add("border-transparent");
+        badgeEl.classList.remove("bg-red-100", "text-red-700");
+        badgeEl.classList.add("bg-blue-100", "text-blue-700");
+        bannerEl.classList.remove("bg-red-50", "border-red-300", "text-red-900");
+        bannerEl.classList.add("bg-blue-50", "border-blue-200", "text-blue-900");
+        nameInput.classList.remove("border-red-500", "focus:ring-red-500", "bg-red-50/30");
+        nameInput.classList.add("border-gray-300", "focus:ring-blue-500");
+        mismatchMsg.classList.add("hidden");
+        submitBtn.classList.remove("bg-red-600", "hover:bg-red-700");
+        submitBtn.classList.add("bg-blue-600", "hover:bg-blue-700");
+      }
+      renderSlotButtons();
+    }
+
+    const userNameInputEl = document.getElementById("user-name");
+    userNameInputEl.addEventListener("input", (e) => {
+      const currentVal = e.target.value.trim();
+      updateTheme(Boolean(originalVerifiedName && currentVal !== originalVerifiedName));
+    });
+
+    // 0000-000 자동 하이픈
+    const inputCodeEl = document.getElementById("input-code");
+    inputCodeEl.addEventListener("input", (e) => {
+      let val = e.target.value.replace(/[^0-9]/g, "").slice(0, 7);
+      if (val.length > 4) val = val.slice(0, 4) + "-" + val.slice(4);
+      e.target.value = val;
+    });
+
+    inputCodeEl.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        verifyCode();
+      }
+    });
+
+    const phoneInputEl = document.getElementById("user-phone");
+    phoneInputEl.addEventListener("input", (e) => {
+      e.target.value = formatPhoneNumber(e.target.value);
+    });
+
+    window.addEventListener("DOMContentLoaded", () => {
+      resetSubmitButton();
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeParam = urlParams.get("code");
+      if (codeParam) {
+        let clean = codeParam.replace(/[^0-9]/g, "").slice(0, 7);
+        if (clean.length > 4) clean = clean.slice(0, 4) + "-" + clean.slice(4);
+        document.getElementById("input-code").value = clean;
+        verifyCode();
+      }
+    });
+
+    // 실시간 잔여석 정보 조회
+    async function fetchSlotAvailability() {
+      try {
+        const res = await fetch(`${API_URL}?action=get_slots`);
+        const json = await res.json();
+        if (json.success && json.slots) {
+          slotsState = json.slots;
+          renderSlotButtons();
+        }
+      } catch (err) {
+        console.error("잔여석 조회 실패:", err);
+      }
+    }
+
+    // 선착순 시간대 버튼 UI 렌더링
+    function renderSlotButtons() {
+      for (let id = 1; id <= 4; id++) {
+        const btn = document.getElementById(`slot-btn-${id}`);
+        const badge = document.getElementById(`slot-badge-${id}`);
+        const info = slotsState[id];
+
+        if (!btn || !badge) continue;
+
+        // 버튼 기본 초기화
+        btn.classList.remove(
+          "border-blue-600", "bg-blue-50", "ring-2", "ring-blue-500",
+          "border-red-600", "bg-red-50", "ring-red-500",
+          "opacity-40", "bg-gray-100", "border-gray-200", "cursor-not-allowed"
+        );
+        btn.classList.add("border-gray-200");
+        badge.className = "text-[11px] font-bold px-2 py-0.5 rounded-full";
+
+        if (!info) {
+          badge.textContent = "조회 대기";
+          badge.classList.add("bg-slate-100", "text-slate-600");
+          continue;
+        }
+
+        const isFull = (info.remaining <= 0);
+
+        if (isFull) {
+          // 정원 마감 상태
+          badge.textContent = "마감";
+          badge.classList.add("bg-red-100", "text-red-700");
+          btn.classList.add("opacity-40", "bg-gray-100", "cursor-not-allowed");
+
+          // 만약 마감된 걸 누르고 있었다면 선택 해제
+          if (selectedSlotId === id) {
+            selectedSlotId = null;
+          }
+        } else {
+          // 잔여석 존재 상태
+          badge.textContent = `잔여 ${info.remaining}석 / 정원 ${info.capacity}석`;
+          badge.classList.add("bg-emerald-100", "text-emerald-800");
+
+          // 현재 사용자가 선택한 경우 강조
+          if (selectedSlotId === id) {
+            const activeBorder = isNameMismatched ? "border-red-600" : "border-blue-600";
+            const activeBg = isNameMismatched ? "bg-red-50" : "bg-blue-50";
+            const ringColor = isNameMismatched ? "ring-red-500" : "ring-blue-500";
+            btn.classList.add(activeBorder, activeBg, "ring-2", ringColor);
+            btn.classList.remove("border-gray-200");
+          }
+        }
+      }
+    }
+
+    // 시간대 선택 (단일 선택 토글)
+    function selectSlot(id) {
+      const info = slotsState[id];
+      if (info && info.remaining <= 0) {
+        alert("선택하신 시간대는 선착순 정원이 마감되었습니다. 다른 시간대를 선택해주세요.");
+        return;
+      }
+
+      if (selectedSlotId === id) {
+        selectedSlotId = null; // 취소
+      } else {
+        selectedSlotId = id; // 선택
+      }
+      renderSlotButtons();
+    }
+
+    // 1. 코드 검증
+    async function verifyCode() {
+      const codeInput = document.getElementById("input-code");
+      const authBtn = document.getElementById("btn-verify");
+      const authMsg = document.getElementById("auth-msg");
+      const code = codeInput.value.trim();
+
+      authMsg.classList.add("hidden");
+      authMsg.innerHTML = "";
+
+      if (code.replace(/[^0-9]/g, "").length !== 7) {
+        authMsg.innerHTML = `<p class="text-xs text-red-500">7자리 숫자를 올바르게 입력해주세요.</p>`;
+        authMsg.classList.remove("hidden");
+        return;
+      }
+
+      authBtn.disabled = true;
+      authBtn.textContent = "인증 중...";
+
+      try {
+        const res = await fetch(`${API_URL}?action=verify&code=${encodeURIComponent(code)}`);
+        const data = await res.json();
+
+        if (data.isLocked) {
+          authMsg.innerHTML = `
+            <div class="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-left text-xs text-amber-900 space-y-1">
+              <div class="font-bold text-amber-800 flex items-center gap-1">
+                <span>🔒</span> 수정 불가 안내
+              </div>
+              <p class="leading-relaxed">
+                입학처에서 제출 정보를 이미 확인하여 <strong>마감(수정 불가) 처리</strong>되었습니다.
+              </p>
+              <p class="text-[11px] text-amber-700 pt-1">
+                ※ 일정 및 정보 변경이 반드시 필요하신 경우 <strong>입학처로 문의</strong>하여 주시기 바랍니다.
+              </p>
+            </div>
+          `;
+          authMsg.classList.remove("hidden");
+          return;
+        }
+
+        if (data.success) {
+          if (data.alreadySubmitted) {
+            const reconfirm = confirm("입력된 정보가 있습니다. 새로 작성하시겠습니까?\n(선착순 배정이므로 이전 배정 좌석이 변경될 수 있습니다.)");
+            if (!reconfirm) {
+              authBtn.disabled = false;
+              authBtn.textContent = "인증확인";
+              return;
+            }
+          }
+
+          document.getElementById("step-auth").classList.add("hidden");
+          document.getElementById("survey-form").classList.remove("hidden");
+
+          originalVerifiedName = (data.assignedTo || "").trim();
+          document.getElementById("display-assigned-name").textContent = originalVerifiedName || "지정인";
+
+          document.getElementById("user-name").value = originalVerifiedName;
+          document.getElementById("user-phone").value = formatPhoneNumber(data.assignedPhone || "");
+
+          updateTheme(false);
+          resetSubmitButton();
+
+          // 잔여석 실시간 데이터 가져오기
+          if (data.slots) {
+            slotsState = data.slots;
+            renderSlotButtons();
+          } else {
+            fetchSlotAvailability();
+          }
+        } else {
+          authMsg.innerHTML = `<p class="text-xs text-red-500">${data.message || "유효하지 않은 코드입니다."}</p>`;
+          authMsg.classList.remove("hidden");
+        }
+      } catch (err) {
+        authMsg.innerHTML = `<p class="text-xs text-red-500">서버 연결 실패: ${err.message}</p>`;
+        authMsg.classList.remove("hidden");
+      } finally {
+        authBtn.disabled = false;
+        authBtn.textContent = "인증확인";
+      }
+    }
+
+    function logout() {
+      document.getElementById("survey-form").reset();
+      document.getElementById("step-auth").classList.remove("hidden");
+      document.getElementById("survey-form").classList.add("hidden");
+      document.getElementById("step-complete").classList.add("hidden");
+      document.getElementById("input-code").value = "";
+      document.getElementById("auth-msg").classList.add("hidden");
+      
+      originalVerifiedName = "";
+      selectedSlotId = null;
+      updateTheme(false);
+      resetSubmitButton();
+      toggleParticipation(false);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    function closeWindow() {
+      window.open('', '_self', '');
+      window.close();
+      setTimeout(() => {
+        alert("브라우저 보안으로 인해 자동으로 창이 닫히지 않을 수 있습니다.\n상단 탭(X)을 눌러 종료해 주세요.");
+      }, 300);
+    }
+
+    function toggleParticipation(isAvailable) {
+      const details = document.getElementById("section-available-details");
+      const privacyAgree = document.getElementById("privacy-agree");
+      const privacyBadge = document.getElementById("privacy-required-badge");
+
+      if (isAvailable) {
+        details.classList.remove("hidden");
+        privacyAgree.required = true;
+        privacyBadge.textContent = "[필수]";
+        privacyBadge.className = "text-red-500 font-semibold";
+        fetchSlotAvailability(); // 참여 가능 누를 때도 최신 잔여석 갱신
+      } else {
+        details.classList.add("hidden");
+        privacyAgree.required = false;
+        privacyBadge.textContent = "[선택]";
+        privacyBadge.className = "text-gray-400 font-semibold";
+      }
+      resetSubmitButton();
+    }
+
+    function toggleAffiliationInfo(value) {
+      const box = document.getElementById("extra-info-box");
+      if (value && value !== "동국대학교") {
+        box.classList.remove("hidden");
+      } else {
+        box.classList.add("hidden");
+      }
+    }
+
+    // 2. 최종 제출 처리 (선착순 검증 연동)
+    async function submitSurvey(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById("btn-submit");
+      const code = document.getElementById("input-code").value.trim();
+      const name = document.getElementById("user-name").value.trim();
+      const phone = formatPhoneNumber(document.getElementById("user-phone").value.trim());
+      const participate = document.querySelector('input[name="participate"]:checked').value;
+
+      let affiliation = "";
+      let bankName = "";
+      let accountNumber = "";
+      let address = "";
+      let trainingDate = "";
+
+      if (participate === "참여 가능") {
+        const privacyAgree = document.getElementById("privacy-agree");
+        if (!privacyAgree.checked) {
+          alert("논술고사 감독위원 참여를 위해 개인정보 수집 및 이용에 동의해주세요.");
+          privacyAgree.focus();
+          resetSubmitButton();
+          return;
+        }
+
+        // [선착순 핵심 검증] 1개 필수 선택 확인
+        if (!selectedSlotId) {
+          alert("희망하시는 근무 시간대를 1개 선택해 주세요.");
+          resetSubmitButton();
+          return;
+        }
+
+        affiliation = document.getElementById("affiliation").value;
+        if (!affiliation) {
+          alert("소속을 선택해주세요.");
+          document.getElementById("affiliation").focus();
+          resetSubmitButton();
+          return;
+        }
+
+        if (affiliation !== "동국대학교") {
+          bankName = document.getElementById("bank-name").value.trim();
+          accountNumber = document.getElementById("account-number").value.trim();
+          address = document.getElementById("address").value.trim();
+
+          if (!bankName || !accountNumber || !address) {
+            alert("동국대학교 외 소속인 경우 은행명, 계좌번호, 주소를 모두 입력하셔야 합니다.");
+            resetSubmitButton();
+            return;
+          }
+        }
+
+        const selectedTraining = document.querySelector('input[name="training_date"]:checked');
+        if (!selectedTraining) {
+          alert("사전교육 희망일자를 반드시 선택해주세요.");
+          resetSubmitButton();
+          return;
+        }
+        trainingDate = selectedTraining.value;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "선착순 배정 확인 및 제출 중...";
+
+      const rawPayload = JSON.stringify({
+        name,
+        phone,
+        participation: participate,
+        selected_slot: selectedSlotId ? TIME_OPTIONS[selectedSlotId] : "",
+        affiliation,
+        bank_name: bankName,
+        account_number: accountNumber,
+        address,
+        training_date: trainingDate,
+        submitted_at: new Date().toISOString()
+      });
+      const encryptedData = CryptoJS.AES.encrypt(rawPayload, PUBLIC_ENCRYPTION_SECRET).toString();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "submit_fcfs",
+            code: code,
+            encrypted_payload: encryptedData,
+            actual_name: name,
+            actual_phone: phone,
+            selected_slot_id: selectedSlotId || 0
+          })
+        });
+
+        const result = await res.json();
+
+        // ⚠️ 동시 제출로 인해 정원이 방금 마감된 경우 대응
+        if (!result.success && result.code === "SLOT_FULL") {
+          alert("⚠️ 선착순 마감 안내\n\n선택하신 시간대의 정원이 방금 전 마감되었습니다.\n잔여석 현황을 새로고침하였으니 다른 시간대를 선택해 주시기 바랍니다.");
+          if (result.slots) {
+            slotsState = result.slots;
+            renderSlotButtons();
+          } else {
+            fetchSlotAvailability();
+          }
+          resetSubmitButton();
+          return;
+        }
+
+        if (result.success) {
+          document.getElementById("survey-form").classList.add("hidden");
+
+          const iconEl = document.getElementById("complete-icon");
+          const titleEl = document.getElementById("complete-title");
+          const descEl = document.getElementById("complete-desc");
+
+          if (participate === "참여 불가") {
+            iconEl.className = "w-14 h-14 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold";
+            iconEl.innerHTML = "🤝";
+            titleEl.textContent = "응답이 완료되었습니다";
+            descEl.innerHTML = "바쁘신 일정으로 이번 논술고사 감독위원으로 함께하지 못해 아쉬운 마음이 큽니다.<br><br>일정을 회신해 주셔서 진심으로 감사드리며, <strong>다음 고사 때는 꼭 소중한 도움과 참여를 부탁드리겠습니다.</strong>";
+          } else {
+            iconEl.className = "w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold";
+            iconEl.innerHTML = "✓";
+            titleEl.textContent = "선착순 배정이 확정되었습니다";
+            descEl.innerHTML = `선택하신 시간대 [<strong>${TIME_OPTIONS[selectedSlotId]}</strong>]로 정상 배정 및 접수되었습니다.<br>세부 일정 안내는 추후 문자로 안내됩니다.`;
+          }
+
+          document.getElementById("step-complete").classList.remove("hidden");
+        } else {
+          alert("제출 실패: " + result.message);
+          resetSubmitButton();
+        }
+      } catch (err) {
+        alert("통신 오류가 발생했습니다: " + err.message);
+        resetSubmitButton();
+      }
+    }
+  </script>
+</body>
+</html>
