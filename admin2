@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>논술고사 감독위원 모집 관리자 콘솔</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- [1] 로그인 화면 -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8 space-y-6">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto text-xl font-bold shadow-md">
+          🔒
+        </div>
+        <h1 class="text-lg font-bold text-slate-900 pt-2">관리자 보안 로그인</h1>
+        <p class="text-xs text-slate-500">논술고사 감독위원 관리 시스템</p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">관리자 비밀번호</label>
+          <input type="password" id="login-password" required placeholder="관리자 비밀번호 입력" autofocus
+                 class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
+        </div>
+        <p id="login-error-msg" class="text-xs text-red-500 font-medium hidden text-center"></p>
+
+        <button type="submit" id="btn-login" class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 shadow-md transition text-sm">
+          관리자 콘솔 접속
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- [2] 대시보드 화면 -->
+  <div id="dashboard-view" class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 hidden">
+    <header class="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">논술고사 감독위원 관리 콘솔</h1>
+        <p class="text-xs text-slate-500 mt-1">7자리 입장코드 관리, 유출 탐지, 수정 잠금 및 응답 결과 뷰어</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="loadDashboardData()" class="bg-blue-600 text-white text-xs font-semibold px-3.5 py-2.5 rounded-lg hover:bg-blue-700 transition">
+          🔄 데이터 새로고침
+        </button>
+        <button onclick="handleLogout()" class="bg-slate-200 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg hover:bg-slate-300 transition">
+          로그아웃
+        </button>
+      </div>
+    </header>
+
+    <!-- 요약 통계 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border">
+        <div class="text-xs text-slate-500 font-medium">총 발급 건수</div>
+        <div id="stat-total" class="text-2xl font-bold mt-1 text-slate-800">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border">
+        <div class="text-xs text-slate-500 font-medium">총 제출 응답수 (참여 가능)</div>
+        <div id="stat-completed" class="text-2xl font-bold mt-1 text-blue-600">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border">
+        <div class="text-xs text-slate-500 font-medium">수정 마감(잠금) 완료</div>
+        <div id="stat-locked" class="text-2xl font-bold mt-1 text-indigo-600">-</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border bg-amber-50/50">
+        <div class="text-xs text-amber-700 font-medium">⚠️ 링크 유출 의심</div>
+        <div id="stat-leaks" class="text-2xl font-bold mt-1 text-amber-600">-</div>
+      </div>
+    </div>
+
+    <!-- 코드 생성 섹션 -->
+    <div class="bg-white rounded-xl border p-5 space-y-4">
+      <h2 class="text-md font-bold">1. 7자리 코드(0000-000) 신규 생성 및 시트 등록</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">대상자 명단 (성명, 전화번호 순)</label>
+          <textarea id="bulk-candidates" rows="3" placeholder="홍길동, 010-1234-5678&#10;이영희, 010-9876-5432"
+                    class="w-full text-xs font-mono p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <button onclick="registerCodes()" class="mt-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">
+            난수 코드 부여 후 구글 시트 등록
+          </button>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-2">
+          <p class="font-bold text-slate-700">문자 발송 URL 안내</p>
+          <p class="text-slate-500">생성된 7자리 코드를 붙여 문자로 발송하시면 바로 인증됩니다:</p>
+          <code class="block bg-white p-2 rounded border text-blue-600 break-all font-mono">
+            https://studyordie-korea.github.io/exam-survey/fcfs.html?code=0000-000
+          </code>
+        </div>
+      </div>
+    </div>
+
+    <!-- 응답 목록 및 복호화 엑셀 다운로드 -->
+    <div class="bg-white rounded-xl border p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+        <h2 class="text-md font-bold">2. 응답 현황 및 결과 (복호화 뷰어)</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="lockAllSubmitted()" class="bg-indigo-600 text-white text-xs font-bold px-3.5 py-2.5 rounded-lg hover:bg-indigo-700 transition">
+            🔒 응답 완료자 전원 일괄 수정잠금
+          </button>
+          <button onclick="downloadExcelCSV()" class="bg-emerald-600 text-white text-xs font-bold px-3.5 py-2.5 rounded-lg hover:bg-emerald-700 transition">
+            📊 복호화 데이터 엑셀(CSV) 다운로드
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-100 border-b text-slate-600 whitespace-nowrap">
+              <th class="p-2.5">코드</th>
+              <th class="p-2.5">배정 대상자</th>
+              <th class="p-2.5">실제 입력자</th>
+              <th class="p-2.5">상태</th>
+              <th class="p-2.5">수정 제어</th>
+              <th class="p-2.5">참여의사</th>
+              <th class="p-2.5">희망/배정 시간대</th>
+              <th class="p-2.5">소속</th>
+              <th class="p-2.5">은행/계좌</th>
+              <th class="p-2.5">사전교육 희망</th>
+              <th class="p-2.5">제출시각</th>
+            </tr>
+          </thead>
+          <tbody id="response-table-body" class="divide-y text-slate-700">
+            <tr>
+              <td colspan="11" class="p-4 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwa6TMknpvnZH5UeE067_Icq6qRu-O0pqG8tsGPo3EhlxbOTFcILN54AAh_uoD0nDch/exec";
+    
+    let savedLoginPwd = "";
+    let cachedDecryptionKey = "";
+    let cachedSubmissions = [];
+
+    // 로그인
+    async function handleLogin(e) {
+      e.preventDefault();
+      const pwdInput = document.getElementById("login-password");
+      const errorMsg = document.getElementById("login-error-msg");
+      const btnLogin = document.getElementById("btn-login");
+      const inputPwd = pwdInput.value.trim();
+
+      errorMsg.classList.add("hidden");
+      if (!inputPwd) return;
+
+      btnLogin.disabled = true;
+      btnLogin.textContent = "인증 확인 중...";
+
+      try {
+        const res = await fetch(`${API_URL}?action=get_data&login_pwd=${encodeURIComponent(inputPwd)}`);
+        const json = await res.json();
+
+        if (json.success) {
+          savedLoginPwd = inputPwd;
+          cachedDecryptionKey = json.decryption_key;
+          cachedSubmissions = json.data;
+
+          document.getElementById("login-view").classList.add("hidden");
+          document.getElementById("dashboard-view").classList.remove("hidden");
+
+          renderDashboard(json.data, cachedDecryptionKey);
+        } else {
+          errorMsg.textContent = json.message || "비밀번호가 일치하지 않습니다.";
+          errorMsg.classList.remove("hidden");
+          pwdInput.value = "";
+          pwdInput.focus();
+        }
+      } catch (err) {
+        errorMsg.textContent = "서버 통신 실패: " + err.message;
+        errorMsg.classList.remove("hidden");
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = "관리자 콘솔 접속";
+      }
+    }
+
+    function handleLogout() {
+      savedLoginPwd = "";
+      cachedDecryptionKey = "";
+      cachedSubmissions = [];
+      document.getElementById("login-password").value = "";
+      document.getElementById("dashboard-view").classList.add("hidden");
+      document.getElementById("login-view").classList.remove("hidden");
+      document.getElementById("login-password").focus();
+    }
+
+    async function loadDashboardData() {
+      if (!savedLoginPwd) return handleLogout();
+
+      try {
+        const res = await fetch(`${API_URL}?action=get_data&login_pwd=${encodeURIComponent(savedLoginPwd)}`);
+        const json = await res.json();
+
+        if (!json.success) {
+          alert("세션 오류: " + json.message);
+          return handleLogout();
+        }
+
+        cachedSubmissions = json.data;
+        renderDashboard(json.data, cachedDecryptionKey);
+      } catch (e) {
+        alert("데이터 갱신 실패: " + e.message);
+      }
+    }
+
+    function generateCleanCode() {
+      const num = String(Math.floor(1000000 + Math.random() * 9000000));
+      return `${num.substring(0, 4)}-${num.substring(4)}`;
+    }
+
+    function formatPhoneNumber(num) {
+      if (!num) return "";
+      const clean = String(num).replace(/[^0-9]/g, "");
+      if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+      return clean;
+    }
+
+    // 명단 등록
+    async function registerCodes() {
+      if (!savedLoginPwd) return handleLogout();
+      const text = document.getElementById("bulk-candidates").value.trim();
+      if (!text) return alert("명단을 입력해주세요.");
+
+      const lines = text.split("\n");
+      const list = [];
+      lines.forEach(line => {
+        const parts = line.split(",").map(p => p.trim());
+        if (parts[0]) {
+          list.push({
+            code: generateCleanCode(),
+            name: parts[0],
+            phone: formatPhoneNumber(parts[1] || "")
+          });
+        }
+      });
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "register_codes",
+            login_pwd: savedLoginPwd,
+            codes: list
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          alert(`총 ${list.length}명의 코드가 등록되었습니다.`);
+          document.getElementById("bulk-candidates").value = "";
+          loadDashboardData();
+        } else {
+          alert("등록 실패: " + data.message);
+        }
+      } catch (err) {
+        alert("통신 오류: " + err.message);
+      }
+    }
+
+    async function toggleLock(code) {
+      if (!savedLoginPwd) return handleLogout();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "toggle_lock",
+            login_pwd: savedLoginPwd,
+            code: code
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadDashboardData();
+        } else {
+          alert("실패: " + data.message);
+        }
+      } catch (e) {
+        alert("통신 오류: " + e.message);
+      }
+    }
+
+    async function lockAllSubmitted() {
+      if (!savedLoginPwd) return handleLogout();
+
+      if (!confirm("응답을 완료한 전원의 수정을 잠그시겠습니까?")) return;
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "lock_all_submitted",
+            login_pwd: savedLoginPwd
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`총 ${data.count}건이 수정 잠금(마감) 처리되었습니다.`);
+          loadDashboardData();
+        }
+      } catch (e) {
+        alert("통신 오류: " + e.message);
+      }
+    }
+
+    // 대시보드 렌더링
+    function renderDashboard(data, key) {
+      let total = data.length;
+      let completed = 0;
+      let availableCount = 0; // 실제 '참여 가능' 인원수 카운트
+      let lockedCount = 0;
+      let leaks = 0;
+
+      const tbody = document.getElementById("response-table-body");
+      tbody.innerHTML = "";
+
+      data.forEach(item => {
+        let isSubmitted = Boolean(item.encrypted_payload);
+        if (isSubmitted) completed++;
+
+        let isLocked = (item.status === "LOCKED");
+        if (isLocked) lockedCount++;
+
+        let isLeak = item.status && item.status.includes("SHARED_SUSPECT");
+        if (isLeak) leaks++;
+
+        let dec = { participation: "-", time_priorities: "-", selected_slot: "-", affiliation: "-", bank_name: "-", account_number: "-", training_date: "-" };
+        if (item.encrypted_payload) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(item.encrypted_payload, key);
+            const str = bytes.toString(CryptoJS.enc.Utf8);
+            if (str) {
+              dec = JSON.parse(str);
+              if (dec.participation === "참여 가능") {
+                availableCount++;
+              }
+            }
+          } catch (e) {
+            dec.participation = "복호화 실패";
+          }
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = isLeak ? "bg-amber-50/70" : (isLocked ? "bg-slate-100/70" : "hover:bg-slate-50");
+
+        let statusText = item.status;
+        let badgeClass = "bg-gray-100 text-gray-500";
+        if (item.status === "NORMAL") {
+          statusText = "1차 제출";
+          badgeClass = "bg-green-100 text-green-700";
+        } else if (item.status === "RESUBMITTED") {
+          statusText = "재응답";
+          badgeClass = "bg-blue-100 text-blue-700 font-semibold";
+        } else if (item.status === "LOCKED") {
+          statusText = "🔒 확인(마감)";
+          badgeClass = "bg-indigo-100 text-indigo-700 font-semibold";
+        } else if (isLeak) {
+          statusText = "⚠️ 공유 유출";
+          badgeClass = "bg-red-100 text-red-700 font-bold";
+        }
+
+        let lockBtn = `
+          <button onclick="toggleLock('${item.code}')" class="px-2 py-1 text-[11px] rounded border font-medium transition ${
+            isLocked 
+              ? 'bg-white border-indigo-300 text-indigo-700 hover:bg-indigo-50' 
+              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+          }">
+            ${isLocked ? '🔓 잠금해제' : '🔒 수정잠금'}
+          </button>
+        `;
+
+        // 순위형(index.html)과 선착순형(fcfs.html) 시간대 데이터 호환
+        const timeDisplay = dec.time_priorities || dec.selected_slot || '-';
+        const partColorClass = dec.participation === '참여 가능' ? 'text-emerald-700 font-bold' : (dec.participation === '참여 불가' ? 'text-slate-400' : '');
+
+        tr.innerHTML = `
+          <td class="p-2.5 font-mono font-bold whitespace-nowrap">${item.code}</td>
+          <td class="p-2.5 whitespace-nowrap">${item.assigned_name} (${item.assigned_phone || "-"})</td>
+          <td class="p-2.5 font-semibold whitespace-nowrap ${isLeak ? 'text-red-600 font-bold' : ''}">${item.actual_name || "-"}</td>
+          <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] ${badgeClass}">${statusText}</span></td>
+          <td class="p-2.5 whitespace-nowrap">${lockBtn}</td>
+          <td class="p-2.5 whitespace-nowrap ${partColorClass}">${dec.participation || '-'}</td>
+          <td class="p-2.5 max-w-xs truncate" title="${timeDisplay}">${timeDisplay}</td>
+          <td class="p-2.5 whitespace-nowrap">${dec.affiliation || '-'}</td>
+          <td class="p-2.5 whitespace-nowrap">${dec.bank_name ? `${dec.bank_name} ${dec.account_number}` : '-'}</td>
+          <td class="p-2.5 max-w-xs truncate" title="${dec.training_date || ''}">${dec.training_date ? dec.training_date.substring(0, 15) + '...' : '-'}</td>
+          <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${item.submitted_at ? item.submitted_at.substring(0, 16).replace("T", " ") : "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("stat-total").textContent = total;
+      document.getElementById("stat-completed").innerHTML = `${completed} <span class="text-base font-semibold text-emerald-600">(참여 ${availableCount}명)</span>`;
+      document.getElementById("stat-locked").textContent = lockedCount;
+      document.getElementById("stat-leaks").textContent = leaks;
+    }
+
+    function downloadExcelCSV() {
+      if (!cachedSubmissions.length) return alert("다운로드할 데이터가 없습니다.");
+      if (!cachedDecryptionKey) return handleLogout();
+
+      let csv = "\uFEFF";
+      csv += "코드,원래 배정자,배정자 연락처,실제 입력자,실제 입력 연락처,상태,참여의사,희망/배정 시간대,소속,은행명,계좌번호,주소,사전교육 희망일시,제출일시\n";
+
+      cachedSubmissions.forEach(row => {
+        let dec = {};
+        if (row.encrypted_payload) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(row.encrypted_payload, cachedDecryptionKey);
+            dec = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+          } catch(e) {}
+        }
+
+        const timeVal = dec.time_priorities || dec.selected_slot || '';
+
+        const line = [
+          `"${row.code}"`,
+          `"${row.assigned_name}"`,
+          `"${row.assigned_phone}"`,
+          `"${row.actual_name || ''}"`,
+          `"${row.actual_phone || ''}"`,
+          `"${row.status}"`,
+          `"${dec.participation || ''}"`,
+          `"${timeVal.replace(/"/g, '""')}"`,
+          `"${dec.affiliation || ''}"`,
+          `"${dec.bank_name || ''}"`,
+          `"${dec.account_number || ''}"`,
+          `"${(dec.address || '').replace(/"/g, '""')}"`,
+          `"${(dec.training_date || '').replace(/"/g, '""')}"`,
+          `"${row.submitted_at || ''}"`
+        ];
+        csv += line.join(",") + "\n";
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `논술고사_감독위원_명단_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
